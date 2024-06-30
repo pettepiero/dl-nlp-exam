@@ -202,8 +202,8 @@ class BertExplanation(Slide):
 
 # Active learning framework
 class ActiveLearningFramework(Slide):
-    def al_scatter_plot_animation(self):
-        ax = Axes(x_range=[0, 20, 5], y_range=[0, 20, 5]).scale(0.5)
+    def al_scatter_plot_animation(self, shift = None):
+        ax = Axes(x_range=[0, 20, 5], y_range=[0, 20, 5]).scale(0.5).shift(shift)
         # Set the seed for reproducibility
         np.random.seed(0)
 
@@ -253,19 +253,20 @@ class ActiveLearningFramework(Slide):
 
         circles = VGroup(*[Circle(radius=0.18, color=RED_A).move_to(dot.get_center()) for dot in selected_dots])
 
-        # self.play(
-        #     LaggedStart(
-        #         *[Write(circle) for circle in circles],
-        #         lag_ratio=0.1,
-        #     ),
-        #     *[ApplyMethod(class1_dots[i].set_color, BLUE) for i in class1_indices],
-        #     *[ApplyMethod(class2_dots[i].set_color, GREEN) for i in class2_indices],
-        # )
-        # self.next_slide()
-        # self.wait(1)
+        # Animation for selecting the data points and highlighting them
+        self.play(
+            LaggedStart(
+                *[Write(circle) for circle in circles],
+                lag_ratio=0.1,
+            ),
+            *[ApplyMethod(class1_dots[i].set_color, BLUE) for i in class1_indices],
+            *[ApplyMethod(class2_dots[i].set_color, GREEN) for i in class2_indices],
+        )
+        self.next_slide()
+        self.wait(1)
 
-        # self.play(FadeOut(circles), run_time=SPEEDUP_TIME)
-        # self.play(*[ApplyMethod(dot.set_color, GRAY) for dot in selected_dots], run_time=SPEEDUP_TIME)
+        self.play(FadeOut(circles), run_time=SPEEDUP_TIME)
+        self.play(*[ApplyMethod(dot.set_color, GRAY) for dot in selected_dots], run_time=SPEEDUP_TIME)
 
         scatter_plot = VGroup(ax, class1_dots, class2_dots, selected_dots, svm_line)
         return scatter_plot
@@ -293,17 +294,12 @@ class ActiveLearningFramework(Slide):
             new_svm_line = ax.plot(lambda x: 15 - 0.5 * x, color=RED)
 
         circle = Circle(radius=0.18, color=RED_A).move_to(selected_dot.get_center())
-        self.play(Write(circle), run_time=SPEEDUP_TIME)
+        self.play(Write(circle), run_time=0.5*SPEEDUP_TIME)
         self.play(ApplyMethod(selected_dot.set_color, color), run_time=SPEEDUP_TIME)
         self.play(ReplacementTransform(svm_line, new_svm_line), run_time=SPEEDUP_TIME)
         self.play(FadeOut(circle), run_time=SPEEDUP_TIME)
 
     def modify_text_time_step(self, full_notation_text, time_step):
-
-        print("************************************")
-        print(f"Full notation text: {full_notation_text}")
-        print(f"Length of full notation text: {len(full_notation_text)}")
-        print("************************************")
 
         formula_time_step = full_notation_text[4]
         formula_visible_data = full_notation_text[6]
@@ -400,10 +396,6 @@ class ActiveLearningFramework(Slide):
             new_formula_obtain,
         )
 
-        print("************************************")
-        print(f"Type of new_full_notation_text: {type(new_full_notation_text)}")
-        print("************************************")
-
         return new_full_notation_text
 
     def create_full_notation_text(self, title):
@@ -429,21 +421,21 @@ class ActiveLearningFramework(Slide):
         )
 
         text_time_step = Text("Time step", font_size=20).next_to(
-            text_original_dataset, direction=DOWN, aligned_edge=LEFT, buff=0.3
+            text_original_dataset, direction=DOWN, aligned_edge=LEFT, buff=0.35
         )
         formula_time_step = (
             MathTex(r"t = 0")
             .scale(0.7)
             .next_to(n_dataset, direction=DOWN, aligned_edge=LEFT)
         )
-        t_box = SurroundingRectangle(text_time_step, color=WHITE)
+        t_box = SurroundingRectangle(formula_time_step, color=WHITE)
 
-        text_pick = Text(f"Agent picks index", font_size=20).next_to(
-            text_time_step, direction=DOWN, aligned_edge=LEFT, buff=0.3
+        text_pick = Text(f"Pick index", font_size=20).next_to(
+            text_time_step, direction=DOWN, aligned_edge=LEFT, buff=0.35
         )
 
-        text_obtain = Text("Agent obtains", font_size=20).next_to(
-            text_pick, direction=DOWN, aligned_edge=LEFT, buff=0.3
+        text_obtain = Text("Obtains", font_size=20).next_to(
+            text_pick, direction=DOWN, aligned_edge=LEFT, buff=0.35
         )
 
         formula_class_label_t = (
@@ -458,14 +450,24 @@ class ActiveLearningFramework(Slide):
             .next_to(formula_class_label_t, direction=DOWN, aligned_edge=LEFT)
         )
 
-        text_agent_sees = Text("The agent sees", font_size=20).next_to(
-            text_time_step, direction=DOWN, aligned_edge=LEFT, buff=2
+        text_agent_sees = Text("See", font_size=20).next_to(
+            text_obtain, direction=DOWN, aligned_edge=LEFT, buff=0.35
         )
 
         formula_visible_data = (
             MathTex(r"D_{X} = \{(x_i, i)\}_{i=1}^{N}")
             .scale(0.8)
-            .next_to(text_agent_sees, direction=DOWN, aligned_edge=LEFT)
+            .next_to(formula_obtain, direction=DOWN, aligned_edge=LEFT)
+        )
+
+        text_update_params = Text("Update model \nparameters", font_size=20).next_to(
+            text_agent_sees, direction=DOWN, buff=0.35, aligned_edge=LEFT
+        )
+
+        formula_model_params = (
+            MathTex(r"\theta_{t}")
+            .scale(0.7)
+            .next_to(formula_visible_data, direction=DOWN, aligned_edge=LEFT)
         )
 
         full_notation_text.add(
@@ -481,6 +483,8 @@ class ActiveLearningFramework(Slide):
             formula_class_label_t,
             text_obtain,
             formula_obtain,
+            text_update_params,
+            formula_model_params,
         )
 
         return full_notation_text
@@ -491,24 +495,40 @@ class ActiveLearningFramework(Slide):
         self.next_slide()
         self.wait(1)
 
-        problem = Text(("Fine-tuning a 'foundation model' can be much"
+        problem = Tex(("Fine-tuning a 'foundation model' can be much"
                         "more sample efficient than \nre-training from scratch, but"
-                        "may still require substantial amounts of data"), font_size=20).next_to(title, direction=DOWN, aligned_edge=LEFT)
+                        "may still require substantial amounts of data."), font_size=40).next_to(title, direction=DOWN, aligned_edge=LEFT)
 
-        self.add(problem)
-        al_text = Text(("Active machine learning is about "
-                        "choosing specific examples during learning."), font_size=20).move_to(problem)
+        self.play(Write(problem), run_time=SPEEDUP_TIME)
+        self.wait(1)
+        al_text = Tex(("Active learning is about "
+                        "choosing specific examples during learning."), font_size=40).next_to(title, direction=DOWN, aligned_edge=LEFT)
         self.play(ReplacementTransform(problem, al_text))
 
-        LLM_text = Text("LLM", font_size=20, color=WHITE).to_edge(LEFT)
-        LLM_box = SurroundingRectangle(
-            LLM_text, color=BLUE_B)
-        LLM_figure = VGroup(LLM_box, LLM_text)
-        self.add(LLM_figure)
+        # LLM_text = Text("LLM", font_size=20, color=WHITE).to_edge(LEFT)
+        # LLM_box = SurroundingRectangle(
+        #     LLM_text, color=BLUE_B)
+        # LLM_figure = VGroup(LLM_box, LLM_text)
+        # self.add(LLM_figure)
 
         scatter_plot = (
-            self.al_scatter_plot_animation()
+            self.al_scatter_plot_animation(shift=LEFT*3)
         )
+
+        # Pros and cons of Active Learning
+        blist = BulletedList(
+            r"Efficiency in labeling",
+            r"Improved model performance",
+            r"Better handling of imbalanced data",
+            r"General adaptability of the \\model to new domains",
+        ).next_to(scatter_plot, direction=RIGHT)
+        blist.font_size = 40
+        blist.shift(LEFT)
+
+        self.play(Write(blist), run_time=SPEEDUP_TIME)
+        self.wait(1)
+        self.next_slide()
+        self.play(FadeOut(blist), run_time=SPEEDUP_TIME)
 
         scatter_plot_small = scatter_plot.copy().to_edge(RIGHT).scale(0.7)
 
@@ -516,16 +536,11 @@ class ActiveLearningFramework(Slide):
 
         self.play(ReplacementTransform(scatter_plot, scatter_plot_small), run_time=SPEEDUP_TIME)        
         self.play(
-            *[FadeOut(obj) for obj in [LLM_figure, al_text]], run_time=SPEEDUP_TIME
+            # *[FadeOut(obj) for obj in [LLM_figure, al_text]], run_time=SPEEDUP_TIME
+            FadeOut(al_text), run_time=SPEEDUP_TIME
         )
 
         full_notation_text = self.create_full_notation_text(title)
-
-        print("************************************")
-        print("Just after creating full notation text")
-        print(f"Full notation text: {full_notation_text}")
-        print(f"Length of full notation text: {len(full_notation_text)}")
-        print("************************************")
 
         self.next_slide()
         self.wait(1)
@@ -536,11 +551,6 @@ class ActiveLearningFramework(Slide):
         self.wait(1)
         full_notation_text = self.modify_text_time_step(full_notation_text, 1)
         self.time_step_animation(scatter_plot_small, 0)
-        print("************************************")
-        print("Just after modifying full notation text")
-        print(f"Full notation text: {full_notation_text}")
-        print(f"Length of full notation text: {len(full_notation_text)}")
-        print("************************************")
 
         self.wait(1)
         full_notation_text = self.modify_text_time_step(full_notation_text, 2)
@@ -549,3 +559,165 @@ class ActiveLearningFramework(Slide):
         full_notation_text = self.modify_text_time_step(full_notation_text, 3)
         self.time_step_animation(scatter_plot_small, 2)
         self.wait(1)
+
+
+class PriorityFunctions(Slide):
+    def create_title(self):
+        title_priority_functions_small = Text("Priority Functions", font_size=30).to_edge(UP+LEFT)
+        title_priority_functions = Text("Priority Functions", font_size=40).center()
+
+        self.play(Write(title_priority_functions), run_time=SPEEDUP_TIME)
+        self.wait(1)
+        self.play(ReplacementTransform(title_priority_functions, title_priority_functions_small), run_time=SPEEDUP_TIME)
+        self.wait(1)
+
+    def construct(self):
+        # self.create_title()
+        arrow_g_theta = MathTex(r"\xrightarrow{g_{\theta}}")
+        box_arrow = SurroundingRectangle(arrow_g_theta, color=WHITE)
+
+        formula_x = (
+            MathTex(r"x")
+            .scale(0.7)
+            .next_to(arrow_g_theta, direction=LEFT, buff=0.7)
+        )
+
+        formula_g_theta_x = (
+            MathTex(r"g  (\theta, x) \in \mathbb{R}")
+            .scale(0.7)
+            .next_to(arrow_g_theta, direction=RIGHT, buff=0.7)
+        )
+
+        self.play(Create(arrow_g_theta), run_time=SPEEDUP_TIME)
+        self.play(Create(box_arrow), run_time=SPEEDUP_TIME)
+        self.play(FadeIn(formula_x, shift=DOWN , run_time=SPEEDUP_TIME))
+        self.play(FadeIn(formula_g_theta_x), run_time=SPEEDUP_TIME)
+        self.wait(1)
+
+        group_g_arrow = VGroup(arrow_g_theta, formula_x, formula_g_theta_x, box_arrow)
+
+        squares_classes = VGroup()
+        for i in range(1,5):
+            square = VGroup()
+            box = Square(side_length=0.5, color=BLUE)
+            if i == 3:
+                LLM_text = Text(f"Class ...", font_size=20).next_to(box, direction=RIGHT)
+            elif i == 4:
+                LLM_text = Text(f"Class C", font_size=20).next_to(box, direction=RIGHT)
+            else:
+                LLM_text = Text(f"Class {i}", font_size=20).next_to(
+                    box, direction=RIGHT
+                )
+            square.add(box, LLM_text)
+            squares_classes.add(square)
+        squares_classes.arrange(direction=DOWN, buff=0.2).next_to(group_g_arrow, direction=RIGHT, buff=1)
+
+        self.play(FadeIn(squares_classes, shift=LEFT), run_time=SPEEDUP_TIME)
+        self.wait(1)
+        self.play(FadeOut(squares_classes), run_time=SPEEDUP_TIME)
+
+        self.play(
+            group_g_arrow.animate.to_edge(LEFT), run_time=SPEEDUP_TIME
+        )
+        self.wait(1)
+
+        formula_p_class_with_z = MathTex(r"p(c|\theta, x, z) = softmax(f_{\theta}(x, z))_c").scale(0.7).next_to(group_g_arrow, direction=DOWN, buff=0.7, aligned_edge=LEFT)
+        formula_p_class = MathTex(r"\int_z P_Z(dz)p(c|\theta, x, z)").scale(0.7).next_to(formula_p_class_with_z, direction=DOWN, buff=0.7, aligned_edge=LEFT)
+
+        self.play(*[FadeIn(formula, shift=DOWN) for formula in [formula_p_class_with_z, formula_p_class]], run_time=SPEEDUP_TIME)
+        self.wait(1)
+        self.next_slide()
+        self.play(*[FadeOut(obj) for obj in [formula_p_class_with_z, formula_p_class]], run_time=SPEEDUP_TIME)
+
+        text_uniform_prioritization = Text("Uniform prioritization", font_size=25, weight="BOLD")
+
+        # Marginal priority functions
+        text_marginal_priority_functions = Text(
+            "Marginal priority functions", font_size=25, weight="BOLD"
+        )
+        text_entropy = (
+            Text("Entropy", font_size=20, weight="BOLD")
+            .next_to(
+                text_marginal_priority_functions, direction=DOWN, aligned_edge=LEFT
+            )
+            .shift(RIGHT * 0.5)
+        )
+        formula_entropy = MathTex(r"g^{entropy}(\theta, x) = H[p(\cdot |\theta, x)]").scale(0.7).next_to(text_entropy, direction=DOWN, aligned_edge=LEFT)
+        entropy = VGroup(text_entropy, formula_entropy)
+
+        text_margin = Text("Margin", font_size=20, weight="BOLD").next_to(
+            text_entropy, direction=DOWN, buff=1.2, aligned_edge=LEFT
+        )
+        formula_margin = MathTex(r"g^{margin}(\theta, x) = p(c_2|\theta, x) - p(c_1|\theta, x)").scale(0.7).next_to(text_margin, direction=DOWN, aligned_edge=LEFT)
+        margin = VGroup(text_margin, formula_margin)
+        marginal_priority_functions = VGroup(text_marginal_priority_functions, entropy, margin)
+
+        # ENNs priority functions
+        text_enns_priority_functions = Text("Epistemic priority functions", font_size=25, weight="BOLD")
+        text_bald_ = (
+            Text("Bald", font_size=20, weight="BOLD")
+            .next_to(text_enns_priority_functions, direction=DOWN, aligned_edge=LEFT)
+            .shift(RIGHT * 0.5)
+        )
+        formula_bald = (
+            MathTex(r"g^{bald}(\theta, x) = \mathbb{H}[p(\cdot | \theta, x)] - \int_z P_z (dz)\mathbb{H}[p(\cdot | \theta, x,z)]")
+            .scale(0.7)
+            .next_to(text_bald_, direction=DOWN, aligned_edge=LEFT)
+        )
+        bald = VGroup(text_bald_, formula_bald)
+
+        text_variance = Text("Variance", font_size=20, weight="BOLD").next_to(
+            text_bald_, direction=DOWN, buff=1.2, aligned_edge=LEFT
+        )
+        formula_variance = (
+            MathTex(r"g^{variance}(\theta, x) = \sum_c \int_z P_z(dz)(p(c|\theta, x, z) - p(c|\theta,x))^2")
+            .scale(0.7)
+            .next_to(text_variance, direction=DOWN, aligned_edge=LEFT)
+        )
+        variance = VGroup(text_variance, formula_variance)
+
+        enn_priority_functions = VGroup(text_enns_priority_functions, bald, variance)
+
+        all_priority_functions_text = VGroup(
+            text_uniform_prioritization,
+            marginal_priority_functions,
+            enn_priority_functions,
+        )
+        all_priority_functions_text.arrange(DOWN, aligned_edge=LEFT, buff=1).to_corner(UP + RIGHT)
+        self.play(Write(all_priority_functions_text), run_time=SPEEDUP_TIME)
+
+        box_uniform_prioritization = (
+            Rectangle(height=1.3, width=9.1, color=WHITE)
+            .move_to(text_uniform_prioritization
+            .get_center()).align_to(text_uniform_prioritization, LEFT)
+            .shift(LEFT*0.1)
+        )
+        box_marginal_priority_functions = (
+            Rectangle(height=3.8, width=9.1, color=WHITE)
+            .move_to(marginal_priority_functions
+            .get_center())
+            .align_to(marginal_priority_functions, LEFT)
+            .shift(LEFT*0.1)
+        )
+        box_enn_priority_functions = (
+            Rectangle(height=4, width=9.1, color=WHITE)
+            .move_to(enn_priority_functions
+            .get_center())
+            .align_to(enn_priority_functions, LEFT)
+            .shift(LEFT*0.1)
+        )
+
+        full_vgroup = VGroup(
+            all_priority_functions_text,
+            box_uniform_prioritization,
+            box_marginal_priority_functions,
+            box_enn_priority_functions,
+        )
+
+        # Add boxes to the scene
+        self.play(Create(box_uniform_prioritization), run_time=SPEEDUP_TIME)
+        self.play(Create(box_marginal_priority_functions), run_time=SPEEDUP_TIME)
+        self.play(Create(box_enn_priority_functions), run_time=SPEEDUP_TIME)
+        self.wait(1)
+        self.play(full_vgroup.animate.shift(UP * 3), run_time=SPEEDUP_TIME)
+        self.wait(2)
