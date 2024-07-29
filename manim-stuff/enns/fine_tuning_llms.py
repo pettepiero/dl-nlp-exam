@@ -19,7 +19,7 @@ class FineTuningLLMs(Slide):
         title = Tex(
             (r"Fine-Tuning Language Models \\ via Epistemic Neural Networks"),
             color=BLUE,
-            font_size=50,
+            font_size=70,
         )
         title_authors = Tex(
             r"Osband, Asghari, Van Roy, McAleese, Aslanides and Irving",
@@ -32,7 +32,7 @@ class FineTuningLLMs(Slide):
             font_size=45,
         ).to_edge(UP)
 
-        line = Line(title.get_left(), title.get_right(), color=WHITE, stroke_width=1).shift(DOWN*0.8)
+        line = Line(title.get_left(), title.get_right(), color=WHITE, stroke_width=1).shift(DOWN)
 
         self.play(Write(title), run_time=SPEEDUP_TIME)
         self.play(Write(line), run_time=SPEEDUP_TIME)
@@ -44,24 +44,24 @@ class FineTuningLLMs(Slide):
         self.play(FadeOut(title_authors), run_time=SPEEDUP_TIME)
         self.play(Transform(title, small_title), run_time=SPEEDUP_TIME)
 
-        text_contents = Tex(r"\textbf{Contents}", font_size=30).next_to(
-            small_title, DOWN * 2, buff=0.5, aligned_edge=LEFT
-        )
+        # text_contents = Tex(r"\textbf{Contents}", font_size=30).next_to(
+        #     small_title, DOWN * 2, buff=0.5, aligned_edge=LEFT
+        # )
 
-        text_bullet_points = BulletedList(
-            r"Fine tuning LLMs",
-            r"Active learning framework",
-            r"Statement of the paper",
-            r"Priority functions",
-            r"Training algorithm and loss function",
-            r"Comparison of active learning agents for LLMs",
-            r"Conclusion",
-            font_size=25).next_to(text_contents, DOWN, buff=0.5, aligned_edge=LEFT)
+        # text_bullet_points = BulletedList(
+        #     r"Fine tuning LLMs",
+        #     r"Active learning framework",
+        #     r"Statement of the paper",
+        #     r"Priority functions",
+        #     r"Training algorithm and loss function",
+        #     r"Comparison of active learning agents for LLMs",
+        #     r"Conclusion",
+        #     font_size=25).next_to(text_contents, DOWN, buff=0.5, aligned_edge=LEFT)
 
-        self.play(FadeIn(text_contents), run_time=SPEEDUP_TIME)
-        self.play(FadeIn(text_bullet_points), run_time=SPEEDUP_TIME)
-        self.next_slide()
-        self.play(FadeOut(*[text for text in (text_contents, text_bullet_points)]), run_time=SPEEDUP_TIME)
+        # self.play(FadeIn(text_contents), run_time=SPEEDUP_TIME)
+        # self.play(FadeIn(text_bullet_points), run_time=SPEEDUP_TIME)
+        # self.next_slide()
+        # self.play(FadeOut(*[text for text in (text_contents, text_bullet_points)]), run_time=SPEEDUP_TIME)
 
         # 3. BERT before fine tuning
         model = BertExplanation.create_LM_figure(
@@ -70,8 +70,8 @@ class FineTuningLLMs(Slide):
             second_text="Fine\ntuning", 
             color=BLUE
         ).shift(LEFT * 3 + DOWN * 0.2)
-        text_ideally = Text("Ideally", font_size=20).next_to(model, direction=LEFT)
-        self.play(Write(text_ideally), run_time=SPEEDUP_TIME)
+        # text_ideally = Text("Ideally", font_size=20).next_to(model, direction=LEFT)
+        # self.play(Write(text_ideally), run_time=SPEEDUP_TIME)
         self.play(FadeIn(model[0]), run_time=SPEEDUP_TIME)
         BertExplanation.no_ft_bullet_point_list(self, model)
         self.play([Write(model[1]), Write(model[2])], run_time=SPEEDUP_TIME)
@@ -79,31 +79,30 @@ class FineTuningLLMs(Slide):
         # 4. BERT Language model tasks after fine tuning
         bullet_point_list = BertExplanation.ft_bullet_point_list(self, model)
         self.next_slide()
+        self.wait(0.1)
         self.play(FadeOut(bullet_point_list), run_time=SPEEDUP_TIME)
 
         # 5. Training animation
-        BertExplanation.train_LM_animation(self, model, num_data_points=20, speedup_factor=5, show_data_file=True)
-        fine_tuned_llm = BertExplanation.create_LM_figure(
-            self=self,
-            first_text="Fine-tuned\nBERT LLM",
-            second_text="Fine\ntuning", 
-            color=BLUE
-        ).next_to(model, direction=RIGHT*2)  
-        self.play(FadeIn(fine_tuned_llm[0]), run_time=SPEEDUP_TIME)
-        self.next_slide()
-        self.play(FadeOut(fine_tuned_llm[0]), run_time=SPEEDUP_TIME)
+        # BertExplanation.train_LM_animation(self, model, num_data_points=20, speedup_factor=5, show_data_file=True)
+        # fine_tuned_llm = BertExplanation.create_LM_figure(
+        #     self=self,
+        #     first_text="Fine-tuned\nBERT LLM",
+        #     second_text="Fine\ntuning", 
+        #     color=BLUE
+        # ).next_to(model, direction=RIGHT*2)  
+        # self.play(FadeIn(fine_tuned_llm[0]), run_time=SPEEDUP_TIME)
+        # self.next_slide()
+        # self.play(FadeOut(fine_tuned_llm[0]), run_time=SPEEDUP_TIME)
 
         # 5. Active learning
-        text_in_practice = Text("In practice", font_size=20).next_to(model, direction=LEFT)
-        self.play(ReplacementTransform(text_ideally, text_in_practice), run_time=SPEEDUP_TIME)
-        BertExplanation.train_LM_animation(self, model, num_data_points=500, speedup_factor=10)
-        # delete all mobjects to free memory
-        self.play(FadeOut(text_in_practice), run_time=SPEEDUP_TIME)
+        # text_in_practice = Text("In practice", font_size=20).next_to(model, direction=LEFT)
+        # self.play(ReplacementTransform(text_ideally, text_in_practice), run_time=SPEEDUP_TIME)
+        # BertExplanation.train_LM_animation(self, model, num_data_points=500, speedup_factor=10)
+        # # delete all mobjects to free memory
+        # self.play(FadeOut(text_in_practice), run_time=SPEEDUP_TIME)
         
-        self.next_slide()
+        # self.next_slide()
         # remove training animation stuff
-
-        
 
         ft_techniques = VGroup()
         ft_text = Text("Fine\nTuning", font_size=20).to_edge(LEFT)
@@ -115,177 +114,6 @@ class FineTuningLLMs(Slide):
         self.next_slide()
 
         # 6. Fine tuning with ENN
-
-
-class BertExplanation(Slide):
-    def create_LM_figure(self, first_text, second_text, color=BLUE):
-        text = Text(first_text, font_size=20)
-        square = SurroundingRectangle(text, color=color, fill_opacity=0)
-        llm = VGroup(square, text)
-
-        rect = (
-            Rectangle(height=4, width=2, color=color, fill_color=BLACK)
-            .next_to(llm, direction=RIGHT * 2)
-            .add_background_rectangle(color=BLACK, opacity=1)
-        )
-        rect.set_z_index(1)
-        rect.background_rectangle.set_z_index(rect.get_z_index())
-        fine_tun = Text(second_text, font_size=20).move_to(rect.get_center())
-        fine_tun.set_z_index(rect.get_z_index() + 1)
-        group = VGroup(llm, rect, fine_tun)
-
-        return group
-
-    def train_LM_animation(self, model, num_data_points, speedup_factor=5, show_data_file=False):
-        data_points = []
-        # setting the level of the model
-        model[2].set_z_index(1)
-
-        # Setting up generic loss function plot
-        ax = Axes(x_range=[0, 3, 3], y_range=[0, 1.3, 3]).scale(0.5).next_to(model[2], direction=RIGHT).shift(RIGHT)
-        vt = ValueTracker(0)
-        loss_f = always_redraw(lambda: ax.plot(lambda x: np.exp(-x), color=RED, x_range=[0, vt.get_value()]))
-        f_dot = always_redraw(
-            lambda: Dot(
-                point=ax.c2p(vt.get_value(), loss_f.underlying_function(vt.get_value())),
-                color=RED,
-            )
-        )
-
-        for i in range(num_data_points):
-            data_point = (
-                Square(side_length=0.15 * model.get_height(), color=WHITE)
-                .add_background_rectangle(color=LIGHT_GRAY, opacity=1)
-            )
-            text_data = Text(f"data", font_size=20, color=BLACK).move_to(data_point.get_center())
-            data_point.add(text_data)
-
-            if i == 0:
-                data_point.next_to(model[2].get_top(), buff=0.5, direction=UP)
-            else:
-                data_point.next_to(data_points[-1].get_top(), buff=0.1, direction=UP)
-            data_point.set_z_index(model[2].get_z_index() - 1)
-            data_point.background_rectangle.set_z_index(data_point.get_z_index() - 1)
-            data_points.append(data_point)
-            # setting the level of the data points behind the model
-            data_point.set_z_index(model[2].get_z_index() - 1)
-            data_point.background_rectangle.set_z_index(data_point.get_z_index() - 1)
-
-        # Setting target positions
-        for i in reversed(range(num_data_points)):
-            if i == num_data_points - 1:
-                data_points[i].target = (
-                    data_points[i]
-                    .copy()
-                    .move_to(model[2].get_bottom() + DOWN * data_points[i].side_length)
-                )
-            else:
-                data_points[i].target = (
-                    data_points[i]
-                    .copy()
-                    .move_to(
-                        data_points[i + 1].target.get_center()
-                        + DOWN * (0.1 + data_points[i].side_length)
-                    )
-                )
-
-        # Setting up animations
-        animations = []
-        for i in range(num_data_points):
-            animations.append(FadeIn(data_points[i]))
-
-        self.play(Write(ax), run_time=SPEEDUP_TIME)
-        self.add(loss_f, f_dot)
-        # self.play(vt.animate.set_value(20), run_time=speedup_factor*SPEEDUP_TIME)
-
-        if(show_data_file):
-            data_file=(
-                Square(side_length=0.3 * model.get_height(), color=WHITE)
-                .add_background_rectangle(color=LIGHT_GRAY, opacity=1)
-                .set_z_index(model[2].get_z_index() +2)
-                .move_to(model[2].get_center())
-            )
-            text_data_file = (
-                Text(f"Specific\nknowledge\ndata file", font_size=18, color=BLACK)
-                .move_to(data_file.get_center())
-                .set_z_index(data_file.get_z_index() + 1)
-            )
-            data_file.add(text_data_file)
-
-            self.play(FadeIn(data_file), run_time=SPEEDUP_TIME)
-            self.wait(1)
-            animations.append(ReplacementTransform(data_file, data_points[2]))
-
-        # Playing animations
-        self.play(
-            AnimationGroup(*animations, lag_ratio=0), run_time=SPEEDUP_TIME
-        )
-        self.wait(0.5)
-
-        animations = []
-        for i in range(num_data_points):
-            animations.append(MoveToTarget(data_points[i]))
-
-        animations.append(vt.animate.set_value(3))
-
-        self.play(
-            AnimationGroup(*animations, lag_ratio=0),
-            run_time=speedup_factor * SPEEDUP_TIME,
-        )
-        self.wait(1)
-
-        animations = []
-        for i in range(num_data_points):
-            animations.append(FadeOut(data_points[i]))
-        animations.append(FadeOut(ax))
-        animations.append(FadeOut(f_dot))
-        animations.append(FadeOut(loss_f))
-
-        self.play(
-            AnimationGroup(*animations, lag_ratio=0), run_time=SPEEDUP_TIME
-        )
-
-    def no_ft_bullet_point_list(self, model):
-        bullet_point_list = VGroup()
-        for i, point in enumerate(
-            ["Token Embeddings", "Hidden States", "Final Layer Embeddings", "Attention weights", "..."]
-        ):
-            dot = Dot().scale(0.75)
-            text = Text(point, font_size=20)
-            dot.next_to(text, direction=LEFT)
-            line = VGroup(dot, text)
-            if i != 0:
-                line.next_to(bullet_point_list, direction=DOWN, aligned_edge=LEFT)
-            bullet_point_list.add(line)
-        bullet_point_list.next_to(model[0], direction=RIGHT)
-
-        self.play(Create(bullet_point_list), run_time=SPEEDUP_TIME)
-        self.next_slide()
-        self.wait(1)
-
-        self.play(FadeOut(bullet_point_list), run_time=SPEEDUP_TIME)
-
-    def ft_bullet_point_list(self, model):
-        bullet_point_list = VGroup()
-        for i, point in enumerate(
-            [
-                "Sentiment analysis",
-                "Text generation",
-                "Question answering",
-                "Summarizing text",
-                "...",
-            ]
-        ):
-            dot = Dot().scale(0.75)
-            text = Text(point, font_size=20)
-            dot.next_to(text, direction=LEFT)
-            line = VGroup(dot, text)
-            if i != 0:
-                line.next_to(bullet_point_list, direction=DOWN, aligned_edge=LEFT)
-            bullet_point_list.add(line)
-        bullet_point_list.next_to(model, direction=RIGHT)
-
-        self.play(Create(bullet_point_list), run_time=SPEEDUP_TIME)
 
 
 # Active learning framework
@@ -576,10 +404,9 @@ class ActiveLearningFramework(Slide):
 
     def construct(self):
         title = Tex("Active Learning Framework", font_size=50, color=BLUE).to_edge(UP+LEFT)
-        self.play(FadeIn(title), run_time=SPEEDUP_TIME)
         al_text = Tex(("Active learning is about "
                         "choosing specific examples during learning."), font_size=40).next_to(title, direction=DOWN, aligned_edge=LEFT)
-        self.play(Write(al_text))
+        self.play(FadeIn(title), FadeIn(al_text), run_time=SPEEDUP_TIME)
 
         # LLM_text = Text("LLM", font_size=20, color=WHITE).to_edge(LEFT)
         # LLM_box = SurroundingRectangle(
@@ -995,7 +822,7 @@ class ComparisonActiveLearningAgents(Slide):
         self.next_slide()
 
 
-class LanguageModels(Slide):
+class Experiment(Slide):
     def create_GLUE_tasks(self, words):
         squares = VGroup()
         square_size = 1
