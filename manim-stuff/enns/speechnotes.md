@@ -50,12 +50,17 @@ Now that it's clearer to us why we're interested in joint predictions, we can tr
 
 So, conventional NNs are specified by their parameters $\theta$ and their parametrized function class $f_\theta$. In a typical multiclass classification problem we have to convert the output to a probability over the classes via softmax, and we can compute the joint prediction by taking the product of the single predictions. In this way we're assuming the independence of the single points and we cannot distinguish ambiguity from insufficiency of data.
 
-ENNs, on the other hand, are specified by a reference distribution $P_Z$ and an epistemic index $z \sim P_Z$. The reference distribution is usually a multidimensional gaussian over a vector space or a uniform distribution over a finite set.
+ENNs, on the other hand, are specified by a reference distribution $P_Z$ and an epistemic index $z \sim P_Z$. The reference distribution is usually a multidimensional gaussian over a vector space or a uniform distribution over a finite set. The epistemic index $z$ can be seen as a latent variable that the nn can use to model its own uncertainty.
 It is the index $z$ that is used to express epistemic uncertainty. In particular, **variation of the network output with z indicates uncertainty that might be resolved by future data.**
 So in ENNs, when you make predictions, you use the same epistemic index $z$ across multiple predictions, therefore the joint is not equal to the product of the marginals anymore.
+
+  
 The idea comes from another paper from Osband, called *Randomized Prior Functions for Deep Reinforcement Learning*. Each plot is a particle of an ensemble of size 4. In each plot we show the effect of training a NN on the same datapoints (dots). The light yellow lines are the different prior functions for each particle. Then we add a trainable network (dashed lines) so that the resulting prediction (the sum) in blue, goes through all the points. The first plot would be $z_1$, the secondo $z_2$ and so on. **The different particles all agree on the training data, but they generalize differently depending on the effect of the learnt network and the prior.**
 
 The idea is that if we change $z$, we can have different predictions and therefore we are uncertain. 
+
+> How is the prior initialized? Not much info about that, but "such that the initial variation in $z$ reflects your uncertainty. After training, the resulting variation in $z$ is meant to be something like a posterior.
+> The design, initialization and scaling of the prior network $\sigma^P$ allows an algorithm designer to encode prior beliefs, and is essential for good performance. Typical choices might include $\sigma^P$ sampled from the same architecture as $\sigma^L$ but with different parameters.
 
 
 **Isn't this just training an ensemble? What is the benefit?**
@@ -74,20 +79,78 @@ Why not BNNs? They are often just impossible to compute, most of the time we can
 
 ## The epinet
 
-The epinet is an architecture that can supplement any conventional neural network to make a new kind of ENN architecture. It is straightforward to add an epinet to an existing **pretrained** model. It is a NN with privileged access to inputs and outputs of activation units in the base network. The subset of these inputs and outputs that are taken as input to the epinet are called *features* $\phi_\zeta (x)$. Also the *epistemic indez* $z$ is an input to the epinet. For epinet parameters $\eta$, its output is $\sigma_\eta(sg[\phi_\zeta(x)],z)$, where $sg$ indicates "stop gradient". The stop gradient essentially means that we keep its argument fixed when computing the gradient.
+The epinet is an architecture that can supplement any conventional neural network to make a new kind of ENN architecture. It is straightforward to add an epinet to an existing **pretrained** model. It is a NN with privileged access to inputs and outputs of activation units in the base network. The subset of these inputs and outputs that are taken as input to the epinet are called *features* $\phi_\zeta (x)$. The features can include the original input, but also hidden representations. Also the *epistemic indez* $z$ is an input to the epinet. For epinet parameters $\eta$, its output is $\sigma_\eta(sg[\phi_\zeta(x)],z)$, where $sg$ indicates "stop gradient". The stop gradient essentially means that we keep its argument fixed when computing the gradient.
+**The idea is that if you've invested lots computation and learning, maybe those hidden units are useful in predicting your uncertainty.**
 
 The epinet can be split in two separate pieces: $$\sigma_\eta (\tilde x ,z) = \sigma_\eta ^L (\tilde x, z) + \sigma^P(\tilde x, z)$$
 
-The first one is learnable and in the paper takes the form of a simple MLP. The second one has no parameters and is sampled from the prior uncertainty. After training, the resulting variation in $z$ is meant to be something like a posterior. We need to set up a prior if we want the network to use the epistemic index $z$. After the training of 
+The first one is learnable and in the paper takes the form of a simple MLP. The second one has no parameters and is reflects the prior uncertainty. After training, the resulting variation in $z$ is meant to be something like a posterior. We need to set up a prior if we want the network to use the epistemic index $z$. After the training of 
 
 
 
 
 ## Training algorithm
-
+Training is very similar to standard NNs training, you just have 
 
 
 ## Fine-Tuning LLMs via ENNs
-Language models often pre-train on large unsupervised text corpora, then fine-tune on additional task-specific data. For example, BERT alone 
+Language models often pre-train on large unsupervised text corpora, then fine-tune on additional task-specific data. The focus of bidirectional encoders like BERT is on **computing contextualized representations of the input tokens**. They use self-attention to map sequences of input embeddings $(x_1, ... , x_n)$ to sequences of output embeddings the same length $(y_1, ... , y_n)$, where the output vectors have been contextualized using information from the entire input sequence. These output embeddings are **contextualized representations** and are generally useful across a range of downstream applications. These models are usually called **encoder only**.
 
-However, **typical fine-tuning schemes do not prioritize the examples that they tune on**. The goal of this paper is to show that, if you can prioritize informative training data, you can achieve better performance while using fewer labels. To do this, the LM is augmented with an epinet.
+Fine-tuning (in the transfer learning paradigm) is the process of taking the network learnt by these pretrained models and further train som additional, smaller network that takes the top layer of the network as input, to perform some **downstream task** like named entity tagging or question answering.
+The intuition is that the pretraining phase learns a language model that instantiates **rich representations of word meaning**.
+
+While it is much more efficient to fine-tune a LLM rather than re-training from scratch, it may still require substantial amounts of data.
+In fact, **typical fine-tuning schemes do not prioritize the examples that they tune on**. The goal of this paper is to show that, if you can prioritize informative training data, you can achieve better performance while using fewer labels than training without prioritization. To do this, the LM is augmented with an epinet and the results are compared with respect to typical priority functions.
+
+
+## Active Learning Framework
+The field of active learning has studied the problem of optimizing which data to collect. Agents that succesfully prioritize their training labels to achieve lower losses on held-out data **with fewer training labels** are said to perform better. 
+
+So we consider a training dataset $D$, with inputs $x_i$ and class labels $y_i$. Initially, at time step $t=0$, the agent can see only the training inputs $D_X$, but no associated labels. At each time step, the agent picks an index $a_t$ and reveals the corresponding class label $y_{a_t}$. Now the agent can use $D_X$ and the new datapoint to update its beliefs, then repeats.
+**The way the index is chosen is specified by the proprity functions.**
+As we said, the priority function is needed to choose which labels to reveal. It maps input $x$ and ENN parameters $\theta$ to a score $g(\theta, x) \in R$. Still focusing the problem on classification, these are the notations for class probabilities predicted by the ENN. Notice how the final class is obtained integrating out the conditioning random variable.
+
+We can now talk about the priority functions that were considered in the paper. 
+
+1. To start off, we have a simple **uniform prioritization**, meaning that **it does not distinguish between inputs**. 
+2. Then we have what the paper calls **marginal priority functions**, which do not account for variability in the epistemic index $z$. They are simple conventional neural network predictions. We call these approaches marginal priority functions since they only depend on the marginal probability estimates for a single input x. **Entropy prioritization** can be interpreted from an *information theory* point of view as the **average level of surprise of the random variable's possible outcomes**.
+Similarly, **margin prioritization** is based on the smallest difference between the highest and second highest class probabilities.
+
+3. **Epistemic priority functions** use the ENN to prioritize uncertain, as opposed to ambiguous, data points. They use the joint predictions distribution. **Bald** prioritization is based on the mutual information gain -> EXPPLAINNSNSSAFNI
+
+**Variance** prioritization uses the variation in predicted probabilities.
+
+
+
+## Training algorithm and loss function
+
+The training algorithm that is used is a variant of stochastic gradient descent, where at each step a large batch of the dataset is selected randomly without replacement. Then the agent selects a fixed number of elements of the candidate batch, using the priority function, to perform SGD on. A fixed number of epistemic indices $\tilde Z$ is selected and the loss is summed over these samples.
+
+Then a **standard cross entropy loss** with regularization is used.
+
+
+## Comparison of active learning agents
+The active learning agents were compared using an open-source benchmark called "Neural Testbed" and developed still by Osband. It is a collection of neural-network-based, synthetic classification problems that evaluate the quality of an agent's predictive distributions.
+
+We consider a generative model based on data generated by a random MLP. The inputs are generated from a standard normal and the labels are assigned with the application of softmax. In the formula on the screen, $h_{\theta^*}$ is a 2 layer MLP with ReLU activation functions and 50 hidden units at each layer. $\rho$ is a temperature parameter. What the researchers did was generate 200 training examples and evaluate the average test log-likelihood over $N=1000$ testing examples, averaging the results over 10 random seeds.
+
+The **baseline agent** doesn't use active learning and on the screen there are some implementation details of the choices they made. In any case, what's important to know is that the goal was to create an agent that represented an upper bound on the performance for any agent that doesn't prioritize its training data.
+
+
+## Language model experiment
+The tasks that were considered on the paper are from the **General Language Understanding Evaluation (GLUE)** benchmark. These are diverse natural language understanding tasks that are widely accepted as a benchmark for performance in the field. Of these, **only the classification tasks were considered**, excluding so 3 out of the original 11 benchmark tasks.
+
+
++ General view of GLUE
+
+
+A simple **per task fine-tuning** setting was considered, where each agent is trained on each GLUE task separately. In this scenario, **the agents are the different fine-tuning heads of the BERT model**. 
+They are shown in the table in the slide. Each agent has a MLP fine-tuning head.
+
+
+The baseline agent is meant to provide an upper bound on how well any agent that does not prioritize its data can do. On the screen there are some implementation details.
+
+## Results
+1. This first plot shows the performance of an epinet prioritized by variance vs methods that don't use prioritization. The benefit of using prioritization is only evident when using the epinet. In the other cases, their performance plateaus earlier as they prioritize potentially noisy examples, rather than informative training data. 
+
+2. The second plot compares agent performance when prioritizing by variance, changing the ENN architecture. We see that epinet performs better than the competing approaches, and the ensemble performs better than dropout in this setting.

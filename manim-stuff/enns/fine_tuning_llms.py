@@ -66,22 +66,27 @@ class FineTuningLLMs(Slide):
         # 3. BERT before fine tuning
         model = BertExplanation.create_LM_figure(
             self=self,
-            first_text="BERT\nLLM",
-            second_text="Fine\ntuning", 
+            first_text=r"BERT\\LLM",
+            second_text=r"Fine\\tuning", 
             color=BLUE
         ).shift(LEFT * 3 + DOWN * 0.2)
         # text_ideally = Text("Ideally", font_size=20).next_to(model, direction=LEFT)
         # self.play(Write(text_ideally), run_time=SPEEDUP_TIME)
         self.play(FadeIn(model[0]), run_time=SPEEDUP_TIME)
         BertExplanation.no_ft_bullet_point_list(self, model)
-        self.play([Write(model[1]), Write(model[2])], run_time=SPEEDUP_TIME)
+        self.play([Write(model[1]), GrowFromCenter(model[2])], run_time=SPEEDUP_TIME)
 
         # 4. BERT Language model tasks after fine tuning
-        bullet_point_list = BertExplanation.ft_bullet_point_list(self, model)
+        bplist, brace = BertExplanation.ft_bullet_point_list(self, model, False)
+        self.play(Transform(model[2], Tex(r"ENN", font_size=30).move_to(model[2].get_center())), run_time=SPEEDUP_TIME)
         self.next_slide()
-        self.wait(0.1)
-        self.play(FadeOut(bullet_point_list), run_time=SPEEDUP_TIME)
-
+        self.play(
+            FadeOut(bplist), 
+            FadeOut(brace),
+            FadeOut(title),
+            FadeOut(model), 
+            run_time=SPEEDUP_TIME)
+        
         # 5. Training animation
         # BertExplanation.train_LM_animation(self, model, num_data_points=20, speedup_factor=5, show_data_file=True)
         # fine_tuned_llm = BertExplanation.create_LM_figure(
@@ -104,37 +109,27 @@ class FineTuningLLMs(Slide):
         # self.next_slide()
         # remove training animation stuff
 
-        ft_techniques = VGroup()
-        ft_text = Text("Fine\nTuning", font_size=20).to_edge(LEFT)
-        box = SurroundingRectangle(ft_text, buff=0.1, color=BLUE)
+        # ft_techniques = VGroup()
+        # ft_text = Text("Fine\nTuning", font_size=20).to_edge(LEFT)
+        # box = SurroundingRectangle(ft_text, buff=0.1, color=BLUE)
 
-        ft_techniques.add(ft_text, box)
+        # ft_techniques.add(ft_text, box)
 
-        self.play(Transform(model, ft_techniques))
-        self.next_slide()
+        # self.play(Transform(model, ft_techniques))
+        # self.next_slide()
 
         # 6. Fine tuning with ENN
 
 
 # Active learning framework
 class ActiveLearningFramework(Slide):
-    def al_scatter_plot_animation(self, shift = None, fade_out_circles = False):
-        ax = create_scatter_plot([0, 20, 5], [0, 20, 5]).shift(shift)
+    def al_scatter_plot_animation(self, shift = None, fade_out_circles = False, faster=False, scale_factor: float = 1, show_line=True, highlight_dots=True):
+        ax = create_scatter_plot([0, 20, 5], [0, 20, 5]).shift(shift).scale(scale_factor)
         class1_dots, class2_dots = generate_reproducible_2d_data_points_2_clusters(ax=ax)
 
-        self.play(Write(ax), run_time=SPEEDUP_TIME)
-        self.play(
-            LaggedStart(*[Write(dot) for dot in class1_dots], lag_ratio=0.1),
-            run_time=SPEEDUP_TIME,
-        )
-        self.play(
-            LaggedStart(*[Write(dot) for dot in class2_dots], lag_ratio=0.1),
-            run_time=SPEEDUP_TIME,
-        )
-
-        svm_line = ax.plot(lambda x: 15 - 0.5 * x, color=RED)
-        self.play(Write(svm_line), run_time=SPEEDUP_TIME)
-        self.wait(1)
+        all_dots = class1_dots + class2_dots
+        if show_line:
+            svm_line = ax.plot(lambda x: 12 - 0.5 * x, color=RED).scale(scale_factor)
         selected_dots = VGroup(
             class1_dots[1], class1_dots[6], class2_dots[5], class2_dots[2]
         )
@@ -148,21 +143,67 @@ class ActiveLearningFramework(Slide):
 
         circles = VGroup(*[Circle(radius=0.18, color=RED_A).move_to(dot.get_center()) for dot in selected_dots])
 
-        # Animation for selecting the data points and highlighting them
-        self.play(
-            LaggedStart(
-                *[Write(circle) for circle in circles],
-                lag_ratio=0.1,
-            ),
-            *[ApplyMethod(class1_dots[i].set_color, BLUE) for i in class1_indices],
-            *[ApplyMethod(class2_dots[i].set_color, GREEN) for i in class2_indices],
-        )
-        self.wait(1.5)
+        if not faster:
+            if show_line:
+                self.play(Write(ax), run_time=SPEEDUP_TIME)
+                self.play(
+                    LaggedStart(*[Write(dot) for dot in all_dots], lag_ratio=0.1),
+                    Write(svm_line),
+                    run_time=SPEEDUP_TIME,
+                )
+            else:
+                self.play(Write(ax), run_time=SPEEDUP_TIME)
+                self.play(
+                    LaggedStart(*[Write(dot) for dot in all_dots], lag_ratio=0.1),
+                    run_time=SPEEDUP_TIME,
+                )
+
+            self.wait(1)
+
+            if highlight_dots:
+                self.play(
+                    LaggedStart(
+                        *[Write(circle) for circle in circles],
+                        lag_ratio=0.1,
+                    ),
+                    *[ApplyMethod(class1_dots[i].set_color, BLUE) for i in class1_indices],
+                    *[ApplyMethod(class2_dots[i].set_color, GREEN) for i in class2_indices],
+                )
+        elif faster:
+            if show_line:
+                self.play(
+                    FadeIn(ax),
+                    LaggedStart(*[FadeIn(dot) for dot in all_dots], lag_ratio=0.1),
+                    FadeIn(svm_line),
+                    run_time=SPEEDUP_TIME,
+                )
+            else:
+                self.play(
+                    FadeIn(ax),
+                    LaggedStart(*[FadeIn(dot) for dot in all_dots], lag_ratio=0.1),
+                    run_time=SPEEDUP_TIME,
+                )
+
+            
+            if highlight_dots:
+                self.play(
+                    LaggedStart(
+                        *[Write(circle) for circle in circles],
+                        lag_ratio=0.1,
+                    ),
+                    *[ApplyMethod(class1_dots[i].set_color, BLUE) for i in class1_indices],
+                    *[ApplyMethod(class2_dots[i].set_color, GREEN) for i in class2_indices],
+                )
+
         if(fade_out_circles):
+            self.wait(1.5)
             self.play(FadeOut(circles), run_time=SPEEDUP_TIME)
             self.play(*[ApplyMethod(dot.set_color, GRAY) for dot in selected_dots], run_time=SPEEDUP_TIME)
 
-        scatter_plot = VGroup(ax, class1_dots, class2_dots, selected_dots, circles, svm_line)
+        if show_line:
+            scatter_plot = VGroup(ax, class1_dots, class2_dots, selected_dots, circles, svm_line)
+        else:
+            scatter_plot = VGroup(ax, class1_dots, class2_dots, selected_dots, circles)
         return scatter_plot
 
     def time_step_animation(self, scatter_plot, time_step):
@@ -188,9 +229,11 @@ class ActiveLearningFramework(Slide):
             new_svm_line = ax.plot(lambda x: 15 - 0.5 * x, color=RED)
 
         circle = Circle(radius=0.18, color=RED_A).move_to(selected_dot.get_center())
-        self.play(Write(circle), run_time=0.5*SPEEDUP_TIME)
-        self.play(ApplyMethod(selected_dot.set_color, color), run_time=SPEEDUP_TIME)
-        self.play(ReplacementTransform(svm_line, new_svm_line), run_time=SPEEDUP_TIME)
+        self.play(Write(circle), run_time=SPEEDUP_TIME)
+        self.play(ApplyMethod(selected_dot.set_color, color),
+                ReplacementTransform(svm_line, new_svm_line),
+                run_time=SPEEDUP_TIME)
+        # self.play(ReplacementTransform(svm_line, new_svm_line), run_time=SPEEDUP_TIME)
         self.play(FadeOut(circle), run_time=SPEEDUP_TIME)
 
     def modify_text_time_step(self, full_notation_text, time_step):
@@ -225,7 +268,7 @@ class ActiveLearningFramework(Slide):
                 .move_to(formula_class_label_t.get_center())
             )
             new_formula_obtain = (
-                MathTex(r"y_{a_{1}}")
+                MathTex(r"y_{a_{1}}", color=BLUE)
                 .scale(0.7)
                 .move_to(formula_obtain.get_center())
             )
@@ -250,7 +293,7 @@ class ActiveLearningFramework(Slide):
                 .move_to(formula_class_label_t.get_center())
             )
             new_formula_obtain = (
-                MathTex(r"y_{a_{2}}")
+                MathTex(r"y_{a_{2}}", color=BLUE)
                 .scale(0.7)
                 .move_to(formula_obtain.get_center())
             )
@@ -275,7 +318,7 @@ class ActiveLearningFramework(Slide):
                 .move_to(formula_class_label_t.get_center())
             )
             new_formula_obtain = (
-                MathTex(r"y_{a_{3}}")
+                MathTex(r"y_{a_{3}}", color=GREEN)
                 .scale(0.7)
                 .move_to(formula_obtain.get_center())
             )
@@ -317,14 +360,14 @@ class ActiveLearningFramework(Slide):
 
         al_text2 = Tex(
             (
-                r"Active learning implies that a learning agent is able to prioritize "
+                r"A learning agent is able to prioritize "
                 r"training examples in order to improve performance "
                 r"on held out data."
             ),
             font_size=30,
         ).next_to(title, direction=DOWN, aligned_edge=LEFT)
 
-        text_original_dataset = Text("Original dataset", font_size=20).next_to(
+        text_original_dataset = Tex(r"Original dataset", font_size=30).next_to(
             al_text2, direction=DOWN, aligned_edge=LEFT
         )
         n_dataset = (
@@ -333,7 +376,7 @@ class ActiveLearningFramework(Slide):
             .next_to(text_original_dataset, direction=RIGHT, buff=1)
         )
 
-        text_time_step = Text("Time step", font_size=20).next_to(
+        text_time_step = Tex(r"Time step", font_size=30).next_to(
             text_original_dataset, direction=DOWN, aligned_edge=LEFT, buff=0.35
         )
         formula_time_step = (
@@ -343,11 +386,11 @@ class ActiveLearningFramework(Slide):
         )
         t_box = SurroundingRectangle(formula_time_step, color=WHITE)
 
-        text_pick = Text(f"Pick index", font_size=20).next_to(
+        text_pick = Tex(r"Pick index", font_size=30).next_to(
             text_time_step, direction=DOWN, aligned_edge=LEFT, buff=0.35
         )
 
-        text_obtain = Text("Obtains", font_size=20).next_to(
+        text_obtain = Tex(r"Obtain", font_size=30).next_to(
             text_pick, direction=DOWN, aligned_edge=LEFT, buff=0.35
         )
 
@@ -363,17 +406,17 @@ class ActiveLearningFramework(Slide):
             .next_to(formula_class_label_t, direction=DOWN, aligned_edge=LEFT)
         )
 
-        text_agent_sees = Text("See", font_size=20).next_to(
+        text_agent_sees = Tex(r"See", font_size=30).next_to(
             text_obtain, direction=DOWN, aligned_edge=LEFT, buff=0.35
         )
 
         formula_visible_data = (
             MathTex(r"D_{X} = \{(x_i, i)\}_{i=1}^{N}")
-            .scale(0.8)
+            .scale(0.7)
             .next_to(formula_obtain, direction=DOWN, aligned_edge=LEFT)
         )
 
-        text_update_params = Text("Update model \nparameters", font_size=20).next_to(
+        text_update_params = Tex(r"Update model \\parameters", font_size=30).next_to(
             text_agent_sees, direction=DOWN, buff=0.35, aligned_edge=LEFT
         )
 
@@ -404,9 +447,18 @@ class ActiveLearningFramework(Slide):
 
     def construct(self):
         title = Tex("Active Learning Framework", font_size=50, color=BLUE).to_edge(UP+LEFT)
-        al_text = Tex(("Active learning is about "
-                        "choosing specific examples during learning."), font_size=40).next_to(title, direction=DOWN, aligned_edge=LEFT)
-        self.play(FadeIn(title), FadeIn(al_text), run_time=SPEEDUP_TIME)
+        al_text = (
+            Tex((r"\textit{Active learning is about }"
+                r"\textit{choosing specific examples during learning.}"
+                ), font_size=40
+            ).move_to(ORIGIN))
+        box = SurroundingRectangle(al_text, color=BLUE, buff=0.12)
+
+        al_text_box = VGroup(al_text, box)
+        self.play(FadeIn(title), FadeIn(al_text), Create(box), run_time=SPEEDUP_TIME)
+        self.next_slide()
+
+        self.play(al_text_box.animate.next_to(title, direction=DOWN, buff=0.5, aligned_edge=LEFT), run_time=SPEEDUP_TIME)
 
         # LLM_text = Text("LLM", font_size=20, color=WHITE).to_edge(LEFT)
         # LLM_box = SurroundingRectangle(
@@ -442,7 +494,7 @@ class ActiveLearningFramework(Slide):
         self.play(ReplacementTransform(scatter_plot, scatter_plot_small), run_time=SPEEDUP_TIME)        
         self.play(
             # *[FadeOut(obj) for obj in [LLM_figure, al_text]], run_time=SPEEDUP_TIME
-            FadeOut(al_text), run_time=SPEEDUP_TIME
+            FadeOut(al_text_box), run_time=SPEEDUP_TIME
         )
 
         full_notation_text = self.create_full_notation_text(title)
@@ -452,31 +504,32 @@ class ActiveLearningFramework(Slide):
         self.next_slide()
 
         full_notation_text = self.modify_text_time_step(full_notation_text, 1)
-        self.next_slide()
+        self.wait(0.2)
         self.time_step_animation(scatter_plot_small, 0)
-        self.next_slide()
-
+        self.wait(0.2)
         full_notation_text = self.modify_text_time_step(full_notation_text, 2)
-        self.next_slide()
+        self.wait(0.2)
         self.time_step_animation(scatter_plot_small, 1)
-        self.next_slide()
+        self.wait(0.2)
 
         full_notation_text = self.modify_text_time_step(full_notation_text, 3)
-        self.next_slide()
+        self.wait(0.2)
         self.time_step_animation(scatter_plot_small, 2)
         self.next_slide()
 
         # Clean plot, introduce priority functions
         self.play(FadeOut(full_notation_text), run_time=SPEEDUP_TIME)
-        self.play(FadeOut(scatter_plot_small[4]), run_time=SPEEDUP_TIME)
-        self.play(*[ApplyMethod(dot.set_color, GRAY) for dot in scatter_plot[3]])
-        self.play(FadeOut(title), run_time=SPEEDUP_TIME)
-        self.play(FadeOut(scatter_plot_small), run_time=SPEEDUP_TIME)
+        # self.play(FadeOut(scatter_plot_small[4]), run_time=SPEEDUP_TIME)
+        # self.play(*[ApplyMethod(dot.set_color, GRAY) for dot in scatter_plot[3]])
+        self.play(
+            FadeOut(title),
+            FadeOut(scatter_plot_small),
+            run_time=SPEEDUP_TIME)
         self.next_slide()
 
 
 class PriorityFunctions(Slide):
-    def create_classification_squares(self, group_g_arrow):
+    def create_classification_squares(self, group_g_arrow, shift: np.ndarray=ORIGIN):
         squares_classes = VGroup()
         for i in range(1, 5):
             square = VGroup()
@@ -495,7 +548,7 @@ class PriorityFunctions(Slide):
             squares_classes.add(square)
         squares_classes.arrange(direction=DOWN, buff=0.2).next_to(
             group_g_arrow, direction=RIGHT, buff=2
-        )
+        ).shift(shift)
         text_classification_c = Tex("Classification c", font_size=30).next_to(
             squares_classes, direction=UP, buff=0.5
         )
@@ -510,10 +563,13 @@ class PriorityFunctions(Slide):
 
     def construct(self):
         title_priority_functions_small = Tex(r"Priority Functions", font_size=50, color=BLUE).to_edge(UP+LEFT)
-        self.play(Write(title_priority_functions_small), run_time=SPEEDUP_TIME)
+        self.play(FadeIn(title_priority_functions_small), run_time=SPEEDUP_TIME)
 
-        priority_fun = PriorityFun(scene=self)
+        priority_fun = PriorityFun(scene=self, position=ORIGIN+UP*1.7)
         priority_fun.create()
+        scatter_plot = (
+            ActiveLearningFramework.al_scatter_plot_animation(self, shift=LEFT*4.5, fade_out_circles=False, faster=True, scale_factor=0.7, show_line=False, highlight_dots=False)
+        )
 
         group_g_arrow = VGroup(
             priority_fun.arrow_g_theta,
@@ -522,13 +578,20 @@ class PriorityFunctions(Slide):
             priority_fun.box_arrow,
         )
 
-        squares_classes, text_classification_c = self.create_classification_squares(group_g_arrow)
+        squares_classes, text_classification_c = self.create_classification_squares(group_g_arrow, shift=DOWN*1.5)
 
         formula_p_class_with_z = MathTex(r"p(c|\theta, x, z) = softmax(f_{\theta}(x, z))_c").scale(0.7).next_to(group_g_arrow, direction=DOWN, buff=0.7, aligned_edge=LEFT)
-        formula_p_class = MathTex(r"\int_z P_Z(dz)p(c|\theta, x, z)").scale(0.7).next_to(formula_p_class_with_z, direction=DOWN, buff=0.7, aligned_edge=LEFT)
+        formula_p_class = (
+            MathTex(r"p(c|\theta, x) = \int_z P_Z(dz)p(c|\theta, x, z)")
+            .scale(0.7)
+            .next_to(
+                formula_p_class_with_z, direction=DOWN, buff=0.7, aligned_edge=LEFT
+            )
+        )
         self.play(*[FadeIn(formula, shift=DOWN) for formula in [formula_p_class_with_z, formula_p_class]], run_time=SPEEDUP_TIME)
         self.next_slide()
 
+        self.play(FadeOut(scatter_plot), run_time=SPEEDUP_TIME)
         group_g_arrow.add(squares_classes, text_classification_c, formula_p_class_with_z, formula_p_class)
 
         self.play(group_g_arrow.animate.to_edge(LEFT), run_time=SPEEDUP_TIME)
@@ -558,7 +621,11 @@ class PriorityFunctions(Slide):
             )
             .shift(RIGHT * 0.5)
         )
-        formula_entropy = MathTex(r"g^{entropy}(\theta, x) = H[p(\cdot |\theta, x)]").scale(0.7).next_to(text_entropy, direction=DOWN, aligned_edge=LEFT)
+        formula_entropy = (
+            MathTex(r"g^{entropy}(\theta, x) = \mathbb{H}[p(\cdot |\theta, x)]")
+            .scale(0.7)
+            .next_to(text_entropy, direction=DOWN, aligned_edge=LEFT)
+        )
         entropy = VGroup(text_entropy, formula_entropy)
 
         text_margin = Tex(
@@ -642,8 +709,9 @@ class PriorityFunctions(Slide):
         self.next_slide()
         self.play(full_vgroup.animate.shift(UP * 3), run_time=SPEEDUP_TIME)
         self.next_slide()
-        self.play(FadeOut(full_vgroup), run_time=SPEEDUP_TIME)
         self.play(
+            FadeOut(title_priority_functions_small),
+            FadeOut(full_vgroup),
             FadeOut(
                 *[
                     obj
@@ -654,14 +722,13 @@ class PriorityFunctions(Slide):
                         priority_fun.box_arrow,
                     )
                 ]
-            )
+            ),
         )
 
 class TrainingAlgorithm(Slide):
     def construct(self):
         title = Tex(r"Training Algorithm and Loss Function", font_size=50, color=BLUE).to_edge(UP+LEFT)
         self.play(FadeIn(title), run_time=SPEEDUP_TIME)
-        self.next_slide()
         img = ImageMobject("./media/images/fine-tuning-llm-enns/algorithm.png").to_edge(
             UP, buff=1
         )
@@ -687,13 +754,12 @@ class TrainingAlgorithm(Slide):
 class ComparisonActiveLearningAgents(Slide):
     def construct(self):
         title = Tex(
-            r"\textbf{Comparison of Active Learning Agents}",
+            r"Comparison of Active Learning Agents",
             font_size=50,
             color=BLUE,
         ).to_edge(UP + LEFT)
         self.play(FadeIn(title), run_time=SPEEDUP_TIME)
 
-        self.next_slide()
         text_task = Tex(
             r"Task: \textbf{Neural Testbed}, an open-source active learning benchmark",
             font_size=30,
@@ -717,27 +783,26 @@ class ComparisonActiveLearningAgents(Slide):
                 input_layer_size=4,
                 hidden_layer_size=9,
                 output_layer_size=2,
-                position=text_random_MLP.get_bottom() + DOWN,
+                position=text_random_MLP.get_bottom() + DOWN + RIGHT,
                 scale_factor=0.5,
             )
             .shift(DOWN)
             .scale(0.5)
         )
+        formula5 = MathTex(r"P(y_t = y | \theta^*) = softmax(h_{\theta^*}(x_t)/\rho)_y",
+                           font_size=30)
+        formula5.next_to(neural_network, RIGHT)
+
         self.play(FadeIn(text_random_MLP), run_time=SPEEDUP_TIME)
-        self.play(Write(neural_network), run_time=SPEEDUP_TIME)
+        self.play(Write(neural_network), Write(formula5), run_time=SPEEDUP_TIME)
         self.next_slide()
-        self.play(FadeOut(neural_network), run_time=SPEEDUP_TIME)
-        self.play(FadeOut(text_random_MLP), run_time=SPEEDUP_TIME)
+        self.play(FadeOut(neural_network), FadeOut(text_random_MLP), FadeOut(formula5), run_time=SPEEDUP_TIME)
         ###############################################################
         self.play(FadeOut(text_neural_testbed), run_time=SPEEDUP_TIME)
-        text_comparison = Tex(
-            r"Comparison of active learning agents with respect to a baseline agent",
-            font_size=30,
-        ).next_to(text_task, DOWN, buff=0.4, aligned_edge=LEFT)
         text_baseline_agent = Tex(
             r"Baseline agent:",
             font_size=25 ,
-        ).next_to(text_comparison, DOWN, buff=0.4, aligned_edge=LEFT)
+        ).next_to(text_task, DOWN, buff=0.4, aligned_edge=LEFT)
 
         item_list_baseline_agent = BulletedList(
             r"Doesn't use active learning",
@@ -751,7 +816,6 @@ class ComparisonActiveLearningAgents(Slide):
             font_size=25,
         ).next_to(text_baseline_agent, DOWN, buff=0.5, aligned_edge=LEFT)
         baseline_agent = VGroup(text_baseline_agent, item_list_baseline_agent)
-        self.play(Write(text_comparison), run_time=SPEEDUP_TIME)
         self.play(FadeIn(baseline_agent), run_time=SPEEDUP_TIME)
         self.next_slide()
         self.wait(1)
@@ -759,12 +823,10 @@ class ComparisonActiveLearningAgents(Slide):
         self.play(FadeOut(baseline_agent, dir=LEFT), run_time=SPEEDUP_TIME)
         img = ImageMobject(
             "./media/images/fine-tuning-llm-enns/fig2.png"
-            ).move_to(ORIGIN).shift(DOWN)
+            ).move_to(ORIGIN).shift(DOWN).scale(1.2)
         self.play(FadeIn(img), run_time=SPEEDUP_TIME)
         self.next_slide()
-        self.wait(1)
         self.play(FadeOut(img), run_time=SPEEDUP_TIME)
-        self.play(FadeOut(text_comparison), run_time=SPEEDUP_TIME)
         self.next_slide()
         ###############################################################
         text_other_agents = Tex(
@@ -822,14 +884,14 @@ class ComparisonActiveLearningAgents(Slide):
         self.next_slide()
 
 
-class Experiment(Slide):
+class LMExperiment(Slide):
     def create_GLUE_tasks(self, words):
         squares = VGroup()
         square_size = 1
 
         for word in words:
             square = Square(side_length=square_size)
-            text = Text(word, font_size=20, color=WHITE).scale(0.5)
+            text = Text(word, font_size=30, color=WHITE).scale(0.5)
             square.add(text)
             squares.add(square)
         squares.arrange_in_grid(2, math.ceil(len(words)/2), buff=0.2)
@@ -849,8 +911,8 @@ class Experiment(Slide):
             "MRPC",
             "DM",
             "WNLI",
-            "MNLI\nmatched",
-            "MNLI\nmismatched",
+            "MNLI\nmat.",
+            "MNLI\nmis.",
             "QNLI",
             "RTE",
             "QQP",
@@ -867,6 +929,8 @@ class Experiment(Slide):
             if (word == "WNLI") or (word == "STS-B") or (word == "DM"):
                 squares_to_fade.add(square)
 
+        self.next_slide()
+
         self.play(
             *[square[0].animate.set_fill(GRAY, 0.5) for square in squares_to_fade] ,
             run_time=SPEEDUP_TIME,
@@ -878,10 +942,12 @@ class Experiment(Slide):
         print(f"DEBUG - len(squares) = {len(squares)}\n\n\n")
 
         self.play(squares.animate.arrange_in_grid(2, math.ceil(len(squares)/2), buff=0.2), run_time=SPEEDUP_TIME)
-        self.wait(1)
-        self.play(*[FadeOut(mob) for mob in self.mobjects], run_time=SPEEDUP_TIME)
         self.next_slide()
-        self.wait(1)
+        self.play(
+            FadeOut(text_GLUE),
+            FadeOut(squares),
+            run_time=SPEEDUP_TIME)
+
 
     def create_language_model_slide(self, title):
         text_bert = Tex(
@@ -899,7 +965,6 @@ class Experiment(Slide):
 
         self.play(FadeIn(text_bert, shift=RIGHT), run_time=SPEEDUP_TIME)
         self.play(FadeIn(list_bert, shift=RIGHT), run_time=SPEEDUP_TIME)
-        self.wait(1)
         words = [
             "CoLA",
             "SST-2",
@@ -916,18 +981,17 @@ class Experiment(Slide):
         bert_box = BertExplanation.create_LM_figure(self, first_text="Pretrained\nBERT\nLLM", second_text="Task\nSpecific\nFine\ntuning", color=BLUE).to_edge(RIGHT).shift(LEFT)
         self.play(FadeIn(bert_box, shift=RIGHT), run_time=SPEEDUP_TIME)
         self.play(FadeIn(squares, shift=RIGHT), run_time=SPEEDUP_TIME)
-        self.wait(1)
         BertExplanation.train_LM_animation(self, bert_box, num_data_points=20)
-        self.wait(1)
+        self.next_slide()
         self.play(*[FadeOut(mob) for mob in self.mobjects], run_time=SPEEDUP_TIME)
         self.next_slide()
-        self.wait(1)
 
     def create_baseline_slide(self, title):
         text_baseline = Tex(
             r"\textbf{Baseline Agent}", font_size=30
         ).next_to(title, DOWN, buff=0.5, aligned_edge=LEFT)
         text_baseline_list = BulletedList(
+            r"Does not perform active learning",
             r"Trained by selecting a fixed and random subset of the training data",
             r"Sweeps over batch size $\in \{4, 16, 64\}$",
             r"Learning rate $\in \{1e-6, 3e-6, 1e-5, 3e-5, 1e-4, 3e-4\}$",
@@ -935,12 +999,10 @@ class Experiment(Slide):
             font_size=25,
         ).next_to(text_baseline, DOWN, buff=0.5, aligned_edge=LEFT)
 
-        self.play(Write(text_baseline), run_time=SPEEDUP_TIME)
-        self.play(Write(text_baseline_list), run_time=SPEEDUP_TIME)
-        self.wait(1)
+        self.play(FadeIn(text_baseline, shift=RIGHT), run_time=SPEEDUP_TIME)
+        self.play(FadeIn(text_baseline_list, shift=RIGHT), run_time=SPEEDUP_TIME)
         self.next_slide()
         self.play(*[FadeOut(mob) for mob in self.mobjects], run_time=SPEEDUP_TIME)
-        self.wait(1)
     
     def fine_tuning_slide(self, title):
         text_fine_tuning = Tex(
@@ -951,11 +1013,184 @@ class Experiment(Slide):
     #############################################
     def construct(self):
         text_title = Tex(
-            r"\textbf{Language Models}", font_size=40
-        ).to_edge(UP + LEFT)
+            r"Language Models", font_size=50, color=BLUE
+           ).to_edge(UP + LEFT)
 
         self.play(Write(text_title), run_time=SPEEDUP_TIME)
         self.create_GLUE_slide(text_title)
+        # self.create_baseline_slide(text_title)
+        # self.create_language_model_slide(text_title)
+        
+
+        agents_img = ImageMobject(
+            "./media/images/fine-tuning-llm-enns/llm-agents.png"
+        ).move_to(ORIGIN)
+        formula_epinet = MathTex(
+            r"\sigma_\eta (\tilde x, z) = (h_\eta(concat(\tilde x, z))+\lambda h^P (concat(\tilde x, z)))^T z",
+            font_size=30
+        ).next_to(agents_img, DOWN, buff=0.5)
+
+        self.play(FadeIn(agents_img), FadeIn(formula_epinet), run_time=SPEEDUP_TIME)
         self.next_slide()
-        self.create_baseline_slide(text_title)
-        self.create_language_model_slide(text_title)
+        self.play(
+            FadeOut(agents_img), 
+            FadeOut(formula_epinet), 
+            FadeOut(text_title),
+            run_time=SPEEDUP_TIME)
+        self.next_slide()
+
+class Results(Slide):
+    def construct(self):
+        title = Tex(
+            r"Results", font_size=50, color=BLUE
+        ).to_edge(UP + LEFT)
+        fig4a = ImageMobject("./media/images/fine-tuning-llm-enns/fig4a.png").move_to(ORIGIN).shift(DOWN)
+        fig4b = ImageMobject("./media/images/fine-tuning-llm-enns/fig4b.png").move_to(ORIGIN).shift(DOWN)
+        fig5 = ImageMobject("./media/images/fine-tuning-llm-enns/fig5.png").move_to(ORIGIN).shift(DOWN)
+        text_fig4a = Tex(r"Epinet prioritized by variance vs other methods that ",
+                         r"do not use epistemic uncertainty (MNLI Dataset)", font_size=30).next_to(fig4a, UP, buff=0.5)
+        text_fig4b = Tex(
+            r"Agent performance when prioritizing by variance, ",
+            r"changing the ENN architecture (MNLI Dataset)",
+            font_size=30,
+        ).next_to(fig4b, UP, buff=0.5)
+        text_fig5 = Tex(
+            r"Fine-tuning BERT models across GLUE tasks", font_size=30
+        ).next_to(fig5, UP, buff=0.5)
+
+        self.play(FadeIn(title), run_time=SPEEDUP_TIME)
+        self.play(FadeIn(fig4a, shift=RIGHT), Write(text_fig4a), run_time=SPEEDUP_TIME)
+        self.next_slide()
+        self.play(FadeOut(fig4a, shift=RIGHT), run_time=SPEEDUP_TIME)
+        self.wait(0.2)
+        self.play(ReplacementTransform(text_fig4a, text_fig4b), run_time=SPEEDUP_TIME)
+        self.play(FadeIn(fig4b, shift=RIGHT), run_time=SPEEDUP_TIME)
+        self.next_slide()
+        self.play(FadeOut(fig4b, shift=RIGHT), run_time=SPEEDUP_TIME)
+        self.wait(0.2)
+        self.play(ReplacementTransform(text_fig4b, text_fig5), run_time=SPEEDUP_TIME)
+        self.play(FadeIn(fig5, shift=RIGHT), run_time=SPEEDUP_TIME)
+        self.next_slide()
+        self.play(
+            FadeOut(fig5), FadeOut(title), FadeOut(text_fig5), run_time=SPEEDUP_TIME
+        )
+
+
+class Conclusion(Slide):
+    def construct(self):
+        title = Tex(
+            r"Conclusion", font_size=50, color=BLUE
+        ).to_edge(UP + LEFT)
+        text_conclusion = BulletedList(
+            r"Uncertainty in NNs is important for decision-making systems and active learning",
+            r"Problem of active learning in fine-tuning language models",
+            r"ENNs are an efficient alternative to classical Bayesian methods",
+            r"Adding epistemic uncertainty estimates to language models is possible in a computationally tractable manner",
+            font_size=30
+        ).next_to(title, DOWN, buff=0.5, aligned_edge=LEFT)
+        self.play(FadeIn(title), run_time=SPEEDUP_TIME)
+        self.play(Write(text_conclusion), run_time=SPEEDUP_TIME)
+        self.next_slide()
+        self.play(FadeOut(title), FadeOut(text_conclusion), run_time=SPEEDUP_TIME)
+        self.next_slide()
+
+
+class References(Slide):
+    def construct(self):
+        title = Text("References", font_size=40).to_corner(UP + LEFT)
+
+        refs = VGroup()
+
+        refs_blist = BulletedList(
+            r"Osband et al. (2023). \textit{Epistemic Neural Networks}. arXiv:2107.08924.",
+            r"Balaji Lakshminarayanan. \textit{Introduction to Uncertainty in Deep Learning}. https://www.gatsby.ucl.ac.uk/~balaji/balaji-uncertainty-talk-cifar-dlrl.pdf",
+            r"Wen et al. (2022). From Predictions to Decisions: The Importance of Joint Predictive Distributions. arXiv:2107.09224",
+            r"Osband et al. (2022). Fine-Tuning Language Models via Epistemic Neural Networks arXiv:2211.01568",
+            r"GLUE Benchmark https://gluebenchmark.com/",
+            r"TalkRL: The Reinforcement Learning Podcast - Ian Osband episode https://www.talkrl.com/episodes/ian-osband",
+            r"Stanford RL Forum - Epistemic Neural Networks talk https://www.youtube.com/@stanfordrlforum6601",
+            font_size=25
+        ).next_to(title, DOWN, buff=0.5, aligned_edge=LEFT)
+
+        reference1 = (
+            Tex(
+                (
+                    r"[1] Osband et al. (2023). \textit{Epistemic Neural Networks}.\\"
+                    r"arXiv:2107.08924."
+                ),
+                font_size=30,
+            )
+            .next_to(title, DOWN, buff=0.5)
+            .align_to(title, LEFT)
+        )
+
+        reference2 = (
+            Tex(
+                (
+                    r"[2] Balaji Lakshminarayanan. \textit{Introduction to Uncertainty in Deep Learning}.\\"
+                    r"https://www.gatsby.ucl.ac.uk/~balaji/balaji-uncertainty-talk-cifar-dlrl.pdf"
+                ),
+                font_size=30,
+            )
+            .next_to(reference1, DOWN, buff=0.5)
+            .align_to(reference1, LEFT)
+        )
+
+        reference3 = (
+            Tex(
+                (
+                    r"[3] Wen et al. (2022). From Predictions to Decisions: The Importance of Joint Predictive Distributions.\\"
+                    r"arXiv:2107.09224"
+                ),
+                font_size=30,
+            )
+            .next_to(reference2, DOWN, buff=0.5)
+            .align_to(reference2, LEFT)
+        )
+
+        reference4 = Tex(
+            (
+                r"[4] Osband et al. (2022). Fine-Tuning Language Models via Epistemic Neural Networks\\"
+                r"arXiv:2211.01568"
+            ),
+            font_size=30,
+        ).next_to(reference3, DOWN, buff=0.5, aligned_edge=LEFT)
+
+        reference5 = Tex(
+            (
+                r"[5] Osband et al. Epistemic Neural Network slides\\"
+                r"https://docs.google.com/presentation/d/1jCY9-\_vGkUV1wFcHxp07lWNF6XMITMZIiYdYnYT6IHs/edit?resourcekey=0-WceWVLKaJMiJ0VLXoPXANw\#slide=id.gad757c9405\_4\_449"
+            ),
+            font_size=30,
+        ).next_to(reference4, DOWN, buff=0.5, aligned_edge=LEFT)
+
+        reference6 = Tex(
+            (
+                r"[6] GLUE Benchmark\\"
+                r"https://gluebenchmark.com/"
+            ),
+            font_size=30,
+        ).next_to(reference5, DOWN, buff=0.5, aligned_edge=LEFT)
+
+        reference7 = Tex(
+            (
+                r"[7] TalkRL: The Reinforcement Learning Podcast - Ian Osband episode\\"
+                r"https://www.talkrl.com/episodes/ian-osband"
+            ),
+            font_size=30,
+        )
+
+        reference8 = Tex(
+            (
+                r"[8] Stanford RL Forum - Epistemic Neural Networks talk\\"
+                r"https://www.youtube.com/@stanfordrlforum6601"
+            ),
+            font_size=30,
+        )
+
+        refs.add(reference1, reference2, reference3, reference4, reference5, reference6, reference7, reference8)
+        refs.arrange_in_grid(8, 1, buff=0.5).to_corner(LEFT + DOWN)
+
+        self.play(FadeIn(title), run_time=SPEEDUP_TIME)
+        self.play(Write(refs_blist), run_time=SPEEDUP_TIME)
+        self.wait(2)

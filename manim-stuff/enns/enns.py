@@ -337,7 +337,7 @@ class ENNs(Slide):
         ).next_to(text_joint_predictions, DOWN, buff=0.5, aligned_edge=LEFT)
 
         formula_output_to_prob_enn = MathTex(
-            r"\hat{P}(y) = softmax(f_{\theta}(x, z))_y", font_size=30
+            r"\hat{P}(y,z) = softmax(f_{\theta}(x, z))_y", font_size=30
         ).next_to(text_output_to_prob, DOWN, buff=0.5, aligned_edge=LEFT)
 
         formula_enn_joint = MathTex(
@@ -354,6 +354,7 @@ class ENNs(Slide):
         blist_enns = BulletedList(
             r"A reference distribution  $P_Z$",
             r"\textit{Epistemic index} $z \sim P_Z$",
+            r"Parameters $\theta$",
             r"A parameterized function class $f$ $\xrightarrow{produces}$ vector valued output $f_\theta(x, z)$",
             font_size=30,
         ).next_to(text_enns_intro, DOWN, buff=0.6, aligned_edge=LEFT)
@@ -361,7 +362,12 @@ class ENNs(Slide):
         plot_norm_dist = NormalDistributionPlot(position=blist_enns[0].get_center() + RIGHT*3, scale_factor=0.08, show_labels=False)
         plot_unif_dist = UniformDistributionPlot(position=plot_norm_dist.get_edge_center(RIGHT) + RIGHT, scale_factor=0.08, show_labels=False)
 
-        self.play(FadeIn(title), FadeIn(text_conventional_nn), FadeIn(blist_conventional_nn), run_time=SPEEDUP_TIME)
+        self.play(
+            FadeIn(title),
+            FadeIn(text_conventional_nn),
+            FadeIn(blist_conventional_nn),
+            run_time=SPEEDUP_TIME,
+        )
         self.next_slide()
         self.play(FadeIn(text1), run_time=SPEEDUP_TIME)
         self.play(FadeIn(text_output_to_prob), FadeIn(formula_output_to_prob_conv), run_time=SPEEDUP_TIME)
@@ -369,6 +375,7 @@ class ENNs(Slide):
 
         self.next_slide()
         self.play(
+            FadeOut(text1),
             Transform(text_conventional_nn, text_enns_intro),
             Transform(blist_conventional_nn, blist_enns),
             Transform(formula_output_to_prob_conv, formula_output_to_prob_enn),
@@ -387,7 +394,6 @@ class ENNs(Slide):
             FadeOut(formula_conv_nn_joint),
             FadeOut(blist_conventional_nn),
             FadeOut(text_conventional_nn),
-            FadeOut(text1),
             FadeOut(plot_unif_dist),
             FadeOut(plot_norm_dist),
             run_time=SPEEDUP_TIME,
@@ -397,7 +403,7 @@ class ENNs(Slide):
         img = (
             ImageMobject("./media/images/enns/rpf.png").scale(1.3).next_to(title, DOWN).shift(RIGHT*2.12)
         )
-        source1_text = Tex(r'\textit{Epistemic Neural Networks}, Osband et al. (2023)', font_size=25).next_to(img, DOWN, buff=0.1)
+        source1_text = Tex(r'\textit{Randomized Prior Functions for Deep Reinforcement Learning}, Osband et al. (2018)', font_size=25).next_to(img, DOWN, buff=0.1)
         self.play(FadeIn(img), FadeIn(source1_text), run_time=SPEEDUP_TIME)
         self.next_slide()
         self.play(FadeOut(img), FadeOut(source1_text), FadeOut(title), run_time=SPEEDUP_TIME)
@@ -511,83 +517,38 @@ class Epinet(Slide):
 
         # training the epinet
         text_training_epinet = (
-            Tex(r"Training the epinet", font_size=40, color=BLUE).move_to(ORIGIN + UP)
+            Tex(r"Training the epinet", font_size=40, color=BLUE).move_to(ORIGIN + UP*2)
         )
-        formula_training_loss = MathTex(
-            r"L_\lambda (\theta, z, x_i, y_i, i) := -ln(softmax(f_\theta(x_i, z))_{y_i}) + \lambda ||\theta||_2^2",
+        formula_training_loss_single_point = MathTex(
+            r"L (\theta, z, x_i, y_i) := -ln(softmax(f_\theta(x_i, z))_{y_i})",
             font_size=30,
-        ).move_to(ORIGIN)
+        ).move_to(ORIGIN+UP)
+
+        final_formula_training_loss = MathTex(
+            r"L (\theta, D) := \int_z P_Z(dz) \left( \sum_{(x,y) \in D} L (\theta, z, x, y) + \Psi (\theta, z) \right)",
+            font_size=30,
+        ).next_to(formula_training_loss_single_point, DOWN, buff=0.5)
+
+        discrete_formula_training_loss = MathTex(
+            r"\frac{1}{\tilde Z} \sum_{z \in \tilde Z} \left( \frac{|D|}{|\tilde D |} \sum_{(x,y) \in \tilde D} L (\theta, z, x, y) + \Psi (\theta, z) \right)",
+            font_size=30,
+        ).next_to(final_formula_training_loss, DOWN, buff=0.5)
 
         self.play(FadeOut(formula_x_tilde), FadeOut(formula_ep_dec_full), FadeOut(formula_4), run_time=SPEEDUP_TIME)
-        self.play(FadeIn(text_training_epinet), run_time=SPEEDUP_TIME)
-        self.play(Write(formula_training_loss), run_time=SPEEDUP_TIME)
+        self.play(
+            FadeIn(formula_training_loss_single_point),
+            FadeIn(text_training_epinet),
+            FadeIn(discrete_formula_training_loss),
+            FadeIn(final_formula_training_loss),
+            run_time=SPEEDUP_TIME
+        )
+
         self.next_slide()
-        self.play(FadeOut(text_training_epinet), FadeOut(formula_training_loss), FadeOut(title), run_time=SPEEDUP_TIME)
-
-
-class References(Slide):
-    def construct(self):
-        title = Text("References", font_size=40).to_corner(UP + LEFT)
-
-        refs = VGroup()
-
-        reference1 = (
-            Tex(
-                (
-                    r"[1] Osband et al. (2023). \textit{Epistemic Neural Networks}.\\"
-                    r"arXiv:2107.08924."
-                ),
-                font_size=30,
-            )
-            .next_to(title, DOWN, buff=0.5)
-            .align_to(title, LEFT)
+        self.play(
+            FadeOut(text_training_epinet), 
+            FadeOut(formula_training_loss_single_point),
+            FadeOut(final_formula_training_loss), 
+            FadeOut(title),
+            FadeOut(discrete_formula_training_loss), 
+            run_time=SPEEDUP_TIME
         )
-
-        reference2 = (
-            Tex(
-                (r"[2] Balaji Lakshminarayanan. \textit{Introduction to Uncertainty in Deep Learning}.\\"
-                r"https://www.gatsby.ucl.ac.uk/~balaji/balaji-uncertainty-talk-cifar-dlrl.pdf"),
-                font_size=30,
-            )
-            .next_to(reference1, DOWN, buff=0.5)
-            .align_to(reference1, LEFT)
-        )
-
-        reference3 = (
-            Text(
-                (
-                    "[3] Wen et al. (2022). From Predictions to Decisions: The Importance of Joint Predictive Distributions.\n\t"
-                    "arXiv:2107.09224"
-                ),
-                font_size=20,
-            )
-            .next_to(reference2, DOWN, buff=0.5)
-            .align_to(reference2, LEFT)
-        )
-
-        reference4 = (
-            Text(
-                (
-                    "[4] Osband et al. (2022). Fine-Tuning Language Models via Epistemic Neural Networks\n\t"
-                    "arXiv:2211.01568"
-                ),
-                font_size=20,
-            )
-            .next_to(reference3, DOWN, buff=0.5, aligned_edge=LEFT)
-        )
-
-        reference5 = (
-            Text(
-                (
-                    "[5] Osband et al. Epistemic Neural Network slides\n\t"
-                    "https://docs.google.com/presentation/d/1jCY9-_vGkUV1wFcHxp07lWNF6XMITMZIiYdYnYT6IHs/edit?resourcekey=0-WceWVLKaJMiJ0VLXoPXANw#slide=id.gad757c9405_4_449"
-                )
-            )
-            .next_to(reference4, DOWN, buff=0.5, aligned_edge=LEFT)
-        )
-
-        refs.add(reference1, reference2, reference3, reference4, reference5)
-
-        self.play(FadeIn(title), run_time=SPEEDUP_TIME)
-        self.play(Write(refs), run_time=SPEEDUP_TIME)
-        self.wait(2)

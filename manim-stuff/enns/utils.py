@@ -44,7 +44,7 @@ class PriorityFun():
     def __init__(self, scene: Scene, position: np.array = ORIGIN, name: str = r"g_{\theta}"):
         self.scene = scene
 
-        self.arrow_g_theta = MathTex(fr"\xrightarrow{{{name}}}")
+        self.arrow_g_theta = MathTex(fr"\xrightarrow{{{name}}}").move_to(position)
         self.box_arrow = SurroundingRectangle(self.arrow_g_theta, color=WHITE)
 
         self.formula_x = (
@@ -60,10 +60,12 @@ class PriorityFun():
         )
 
     def create(self):
-        self.scene.play(Create(self.arrow_g_theta), run_time=SPEEDUP_TIME)
-        self.scene.play(Create(self.box_arrow), run_time=SPEEDUP_TIME)
-        self.scene.play(FadeIn(self.formula_x, shift=DOWN, run_time=SPEEDUP_TIME))
-        self.scene.play(FadeIn(self.formula_g_theta_x), run_time=SPEEDUP_TIME)
+        self.scene.play(
+            Create(self.arrow_g_theta),
+            Create(self.box_arrow),
+            FadeIn(self.formula_x, shift=DOWN),
+            FadeIn(self.formula_g_theta_x),
+            run_time=SPEEDUP_TIME)
 
 
 class NormalDistributionPlot(VMobject):
@@ -231,18 +233,18 @@ class UniformDistributionPlot(VMobject):
 
 class BertExplanation(Slide):
     def create_LM_figure(self, first_text, second_text, color=BLUE):
-        text = Text(first_text, font_size=20)
-        square = SurroundingRectangle(text, color=color, fill_opacity=0)
+        text = Tex(first_text, font_size=25)
+        square = SurroundingRectangle(text, color=color, fill_opacity=0, buff=0.3)
         llm = VGroup(square, text)
 
         rect = (
-            Rectangle(height=4, width=2, color=color, fill_color=BLACK)
+            Rectangle(height=3, width=2, color=color, fill_color=BLACK)
             .next_to(llm, direction=RIGHT * 2)
             .add_background_rectangle(color=BLACK, opacity=1)
         )
         rect.set_z_index(1)
         rect.background_rectangle.set_z_index(rect.get_z_index())
-        fine_tun = Text(second_text, font_size=20).move_to(rect.get_center())
+        fine_tun = Tex(second_text, font_size=25).move_to(rect.get_center())
         fine_tun.set_z_index(rect.get_z_index() + 1)
         group = VGroup(llm, rect, fine_tun)
 
@@ -360,24 +362,26 @@ class BertExplanation(Slide):
     def no_ft_bullet_point_list(self, model):
         bullet_point_list = VGroup()
         for i, point in enumerate(
-            ["Token Embeddings", "Hidden States", "Final Layer Embeddings", "Attention weights", "..."]
+            ["Token Embeddings", "Hidden States", "Contextualized representations"]
         ):
             dot = Dot().scale(0.75)
-            text = Text(point, font_size=20)
+            text = Tex(point, font_size=25)
             dot.next_to(text, direction=LEFT)
             line = VGroup(dot, text)
             if i != 0:
                 line.next_to(bullet_point_list, direction=DOWN, aligned_edge=LEFT)
             bullet_point_list.add(line)
-        bullet_point_list.next_to(model[0], direction=RIGHT)
+        bullet_point_list.next_to(model[0], direction=RIGHT, buff=1)
+        brace = Brace(bullet_point_list, direction=LEFT)
 
-        self.play(Create(bullet_point_list), run_time=SPEEDUP_TIME)
+        self.play(Create(bullet_point_list), Create(brace), run_time=SPEEDUP_TIME)
         self.wait(0.2)
         self.next_slide()
-        self.play(FadeOut(bullet_point_list), run_time=SPEEDUP_TIME)
+        self.play(FadeOut(bullet_point_list), FadeOut(brace), run_time=SPEEDUP_TIME)
         self.wait(0.2)
+        return bullet_point_list, brace
 
-    def ft_bullet_point_list(self, model):
+    def ft_bullet_point_list(self, model, fade_out=False):
         bullet_point_list = VGroup()
         for i, point in enumerate(
             [
@@ -389,14 +393,20 @@ class BertExplanation(Slide):
             ]
         ):
             dot = Dot().scale(0.75)
-            text = Text(point, font_size=20)
+            text = Tex(point, font_size=25)
             dot.next_to(text, direction=LEFT)
             line = VGroup(dot, text)
             if i != 0:
                 line.next_to(bullet_point_list, direction=DOWN, aligned_edge=LEFT)
             bullet_point_list.add(line)
-        bullet_point_list.next_to(model, direction=RIGHT)
+        bullet_point_list.next_to(model, direction=RIGHT, buff=1)
+        brace = Brace(bullet_point_list, direction=LEFT)
 
-        self.play(Create(bullet_point_list), run_time=SPEEDUP_TIME)
+
+        self.play(Create(bullet_point_list), Create(brace), run_time=SPEEDUP_TIME)
         self.wait(0.2)
-        return bullet_point_list
+        self.next_slide()
+        if fade_out:
+            self.wait(0.1)
+            self.play(FadeOut(bullet_point_list), FadeOut(brace), run_time=SPEEDUP_TIME)
+        return bullet_point_list, brace
