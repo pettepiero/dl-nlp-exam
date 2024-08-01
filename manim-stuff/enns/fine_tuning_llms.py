@@ -1097,18 +1097,18 @@ class Conclusion(Slide):
 
 class References(Slide):
     def construct(self):
-        title = Text("References", font_size=40).to_corner(UP + LEFT)
+        title = Tex("References", font_size=50, color=BLUE).to_corner(UP + LEFT)
 
         refs = VGroup()
 
         refs_blist = BulletedList(
+            # r"Balaji Lakshminarayanan. \textit{Introduction to Uncertainty in Deep Learning}. https://www.gatsby.ucl.ac.uk/~balaji/balaji-uncertainty-talk-cifar-dlrl.pdf",
             r"Osband et al. (2023). \textit{Epistemic Neural Networks}. arXiv:2107.08924.",
-            r"Balaji Lakshminarayanan. \textit{Introduction to Uncertainty in Deep Learning}. https://www.gatsby.ucl.ac.uk/~balaji/balaji-uncertainty-talk-cifar-dlrl.pdf",
-            r"Wen et al. (2022). From Predictions to Decisions: The Importance of Joint Predictive Distributions. arXiv:2107.09224",
-            r"Osband et al. (2022). Fine-Tuning Language Models via Epistemic Neural Networks arXiv:2211.01568",
+            r"Wen et al. (2022). \textit{From Predictions to Decisions: The Importance of Joint Predictive Distributions}. arXiv:2107.09224",
+            r"Osband et al. (2022). \textit{Fine-Tuning Language Models via Epistemic Neural Networks}. arXiv:2211.01568",
             r"GLUE Benchmark https://gluebenchmark.com/",
-            r"TalkRL: The Reinforcement Learning Podcast - Ian Osband episode https://www.talkrl.com/episodes/ian-osband",
-            r"Stanford RL Forum - Epistemic Neural Networks talk https://www.youtube.com/@stanfordrlforum6601",
+            r"textit{TalkRL: The Reinforcement Learning Podcast} - Ian Osband episode https://www.talkrl.com/episodes/ian-osband",
+            r"Stanford RL Forum - \textit{Epistemic Neural Networks} talk https://www.youtube.com/@stanfordrlforum6601",
             font_size=25
         ).next_to(title, DOWN, buff=0.5, aligned_edge=LEFT)
 

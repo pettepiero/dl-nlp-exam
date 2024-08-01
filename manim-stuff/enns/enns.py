@@ -23,20 +23,22 @@ class Introduction(Slide):
     def construct(self):
         # Title slide
         self.next_slide()
-        center_text = Tex(r"Epistemic\\Neural Networks", color=BLUE, font_size=110)
+        center_text = Tex(r"Epistemic\\Neural Networks", color=BLUE, font_size=110).move_to(ORIGIN +UP)
         authors = Tex(
             r"Osband, Wen, Asghari, Dwaracherla, Ibrahimi, Lu and Van Roy",
             font_size=30,
         ).next_to(center_text, DOWN, buff=0.5)
         small_title = Tex(r"Epistemic Neural Networks", font_size=50, color=BLUE).to_corner(UP + LEFT)
 
+        text_piero =  Tex(r"Piero Pettenà - Deep Learning", font_size=25).next_to(authors, DOWN, buff=1)
+
         line = Line(center_text.get_left(), center_text.get_right(), color=WHITE, stroke_width=1).shift(DOWN*1.4)
 
         self.play(Write(center_text), run_time=SPEEDUP_TIME)
         self.play(Write(line), run_time=SPEEDUP_TIME)
-        self.play(Write(authors), run_time=SPEEDUP_TIME)
+        self.play(Write(authors), Write(text_piero), run_time=SPEEDUP_TIME)
         self.next_slide()
-        self.play(Transform(center_text, small_title), FadeOut(authors), FadeOut(line), run_time=SPEEDUP_TIME)
+        self.play(Transform(center_text, small_title), FadeOut(authors), FadeOut(line), FadeOut(text_piero), run_time=SPEEDUP_TIME)
 
         # What are the slides about
         bullet_point_list = VGroup()
@@ -138,7 +140,8 @@ class JointPredDec(Slide):
         box = SurroundingRectangle(premise, buff=0.1, color=BLUE)
         image_paper = ImageMobject("./media/images/from-pred-to-dec.png").next_to(premise, DOWN, buff=0.5)
 
-        self.play(*[Write(obj) for obj in [title, premise, box]], run_time=SPEEDUP_TIME)
+        self.play(*[Write(obj) for obj in [premise, box]],
+                  FadeIn(title), run_time=SPEEDUP_TIME)
         self.wait(0.1)
         self.play(FadeIn(image_paper), run_time=SPEEDUP_TIME)
 
