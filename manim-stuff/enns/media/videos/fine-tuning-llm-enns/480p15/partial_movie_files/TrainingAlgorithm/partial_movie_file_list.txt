@@ -1,0 +1,7 @@
+# This file is used internally by FFMPEG.
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine-tuning-llm-enns/480p15/partial_movie_files/TrainingAlgorithm/1185818338_1909434251_223132457.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine-tuning-llm-enns/480p15/partial_movie_files/TrainingAlgorithm/624642324_4105431158_3898073245.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine-tuning-llm-enns/480p15/partial_movie_files/TrainingAlgorithm/624642324_2919340033_1229633569.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine-tuning-llm-enns/480p15/partial_movie_files/TrainingAlgorithm/624642324_1192157759_1291097191.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine-tuning-llm-enns/480p15/partial_movie_files/TrainingAlgorithm/624642324_3078066943_1593668103.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine-tuning-llm-enns/480p15/partial_movie_files/TrainingAlgorithm/624642324_2919340033_3852496006.mp4'

@@ -1,0 +1,5 @@
+# This file is used internally by FFMPEG.
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/TrainingAlgorithm/3977891868_3892859807_223132457.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/TrainingAlgorithm/2852726489_343269981_4279793818.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/TrainingAlgorithm/2852726489_1765368354_3897021493.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/TrainingAlgorithm/2852726489_937923929_1169146584.mp4'

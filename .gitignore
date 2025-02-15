@@ -1,0 +1,8 @@
+python*/
+slides/
+bert.pdf
+manim-stuff/.venv/
+*.pdf
+media/videos
+media/Tex
+media/texts

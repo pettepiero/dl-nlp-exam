@@ -1,0 +1,12 @@
+# This file is used internally by FFMPEG.
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/Results/3977891868_1132647115_223132457.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/Results/2852726489_3365580342_700544791.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/Results/2852726489_4040943245_4021185836.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/Results/2852726489_1456775635_585854205.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/Results/2852726489_198598508_3041497278.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/Results/2852726489_3643772076_3679988361.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/Results/2852726489_4040943245_1627485646.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/Results/2852726489_1456775635_3193589454.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/Results/2852726489_1973205497_2237928044.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/Results/2852726489_2567839958_3880029786.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_llms/1080p60/partial_movie_files/Results/2852726489_3361515242_3179531413.mp4'

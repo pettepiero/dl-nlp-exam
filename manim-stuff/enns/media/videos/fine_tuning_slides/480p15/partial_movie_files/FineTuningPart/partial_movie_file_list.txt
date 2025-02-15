@@ -1,0 +1,3 @@
+# This file is used internally by FFMPEG.
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_slides/480p15/partial_movie_files/FineTuningPart/1185818338_123554531_631829896.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine_tuning_slides/480p15/partial_movie_files/FineTuningPart/1185818338_2268332985_117460479.mp4'

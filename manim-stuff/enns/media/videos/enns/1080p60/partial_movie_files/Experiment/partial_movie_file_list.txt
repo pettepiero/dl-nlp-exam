@@ -1,0 +1,8 @@
+# This file is used internally by FFMPEG.
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/enns/1080p60/partial_movie_files/Experiment/3977891868_1361386914_223132457.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/enns/1080p60/partial_movie_files/Experiment/2852726489_770101875_2199457461.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/enns/1080p60/partial_movie_files/Experiment/2852726489_594542595_2289212495.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/enns/1080p60/partial_movie_files/Experiment/2852726489_4024073969_2225720132.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/enns/1080p60/partial_movie_files/Experiment/2852726489_3757602983_3573560636.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/enns/1080p60/partial_movie_files/Experiment/2852726489_1774665242_1488173183.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/enns/1080p60/partial_movie_files/Experiment/2852726489_296157113_4082968949.mp4'

@@ -1,0 +1,9 @@
+\documentclass[preview]{standalone}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\begin{document}
+\begin{align*}
+L_{\lambda}^{XENT}(\theta, z, x_i, y_i, i) = - \ln(\text{softmax}(f_{\theta}(x_i, z))_{y_i}) + \lambda \left| \theta \right|_2^2
+\end{align*}
+\end{document}

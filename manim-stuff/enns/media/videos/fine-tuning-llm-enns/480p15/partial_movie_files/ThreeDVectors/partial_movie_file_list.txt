@@ -1,0 +1,4 @@
+# This file is used internally by FFMPEG.
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine-tuning-llm-enns/480p15/partial_movie_files/ThreeDVectors/1185818338_2469918022_2358209951.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine-tuning-llm-enns/480p15/partial_movie_files/ThreeDVectors/624642324_3917735272_4130320158.mp4'
+file 'file:/home/pettepiero/UNITS/dl-nlp-exam/manim-stuff/enns/media/videos/fine-tuning-llm-enns/480p15/partial_movie_files/ThreeDVectors/624642324_1733944848_2386595476.mp4'

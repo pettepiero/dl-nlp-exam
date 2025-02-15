@@ -4,6 +4,7 @@ import re
 from constants import *
 from utils import *
 from plots import *
+import pandas as pd
 
 # Presentation overview:
 # - Introduction slide
@@ -555,3 +556,134 @@ class Epinet(Slide):
             FadeOut(discrete_formula_training_loss), 
             run_time=SPEEDUP_TIME
         )
+
+
+class Experiment(Slide):
+    def construct(self):
+        title = Tex(r"Trying to visualize uncertainty", font_size=50, color=BLUE).to_corner(UP + LEFT)
+
+        github_logo = ImageMobject("./media/images/enns/github-logo.png").scale(0.4).move_to([-4, 2,0])
+        text_pretrained = Tex(r"Pretrained epinet model", font_size=30).move_to([-4, 1, 0])
+        group1 = Group(github_logo, text_pretrained)
+        imagenet_logo = (
+            ImageMobject("./media/images/enns/imagenet.png")
+            .scale(0.6)
+            .move_to([4, 2, 0])
+        )
+        text_dataset_batch = Tex(
+            "Small batch of ImageNet dataset", font_size=30
+        ).move_to([4, 1, 0])
+        group2 = Group(imagenet_logo, text_dataset_batch)
+
+        self.play(FadeIn(title), run_time=SPEEDUP_TIME)
+        self.play(FadeIn(group1), run_time=SPEEDUP_TIME)
+        self.play(FadeIn(group2), run_time=SPEEDUP_TIME)
+        self.next_slide()
+
+        # Define the Gaussian function
+        def gaussian(x):
+            return 1.5 * np.exp(-(x**2))
+
+        # Create the Gaussian curve
+        gaussian_curve = FunctionGraph(gaussian, x_range=[-3, 3], color=YELLOW)
+        gaussian_curve.move_to([-4, -2, 0])  # Positioning below other elements
+        text_index = Tex(r"Epistemic index", font_size=30).move_to([-4, -3, 0])
+
+        # Create the moving dot
+        dot = Dot(color=RED).move_to(gaussian_curve.points[0])
+        # Create the small triangle over the curve
+        triangle = (
+            Triangle(color=WHITE)
+            .rotate(20*DEGREES)
+            .scale(0.6)
+            .move_to(gaussian_curve.get_edge_center(UP) + UP * 0.7)
+        )
+
+        self.play(  
+            Create(gaussian_curve),
+            Write(text_index),
+            Create(triangle),
+            run_time=1
+        )
+
+        # --- Bar Plot ---
+        bar_width = 0.6
+        initial_heights = [1, 2, 1.5, 2.5]  # Initial bar heights
+        new_heights = [2.5, 1, 3, 1.5]  # New heights to animate to
+
+        gaussian_base_y = -3  # Y-position of the Gaussian base
+        x_group2 = group2.get_x()
+
+        bars = VGroup(
+            *[
+                Rectangle(width=bar_width, height=h, color=BLUE, fill_opacity=1).move_to(
+                    [x_group2 - 2*1.2 + i * 1.2, gaussian_base_y + h / 2, 0]  # Adjust y-position dynamically
+                )
+                for i, h in enumerate(initial_heights)
+            ]
+        )
+        # group of different shapes under each bar
+        shapes = VGroup(
+            Circle(radius=0.3, color=WHITE).move_to(
+                bars[0].get_edge_center(DOWN) + DOWN * 0.5
+            ),
+            Square(side_length=0.55, color=WHITE).move_to(
+                bars[1].get_edge_center(DOWN) + DOWN * 0.5
+            ),
+            Triangle(color=WHITE)
+            .scale(0.4)
+            .move_to(bars[2].get_edge_center(DOWN) + DOWN * 0.5),
+            RegularPolygon(n=6, color=WHITE)
+            .scale(0.4)
+            .move_to(bars[3].get_edge_center(DOWN) + DOWN * 0.5),
+        )
+
+        # Add bars to scene
+        self.play(
+            FadeIn(bars),
+            FadeIn(shapes),
+            run_time=1)
+        self.play(
+            MoveAlongPath(dot, gaussian_curve),
+            *[
+                bar.animate.stretch(new_h / old_h, dim=1).shift(
+                    (new_h - old_h) / 2 * UP  # Move it up/down by half the height difference
+                )
+                for bar, old_h, new_h in zip(bars, initial_heights, new_heights)
+            ],
+            run_time=2,
+            rate_func=smooth,
+        )
+
+        self.next_slide()
+        self.play(
+            FadeOut(bars), 
+            FadeOut(gaussian_curve), 
+            FadeOut(group1), 
+            FadeOut(group2),
+            FadeOut(text_index),
+            FadeOut(triangle),
+            FadeOut(shapes),
+            FadeOut(dot),
+            run_time=SPEEDUP_TIME)
+
+
+class Experiment2(Slide):
+    def construct(self):
+        title = Tex(
+            r"Trying to visualize uncertainty", font_size=50, color=BLUE
+        ).to_corner(UP + LEFT)
+        
+        self.add(title)
+
+        img = ImageMobject("./media/images/enns/robin.png").to_edge(LEFT, buff=0.1).scale(0.5)
+
+
+        #UPDADAPDAPTEUTEPTPUETPPTEEEE logit_labels_df.csv
+        logits = pd.read_csv("./logit_labels_df.csv")
+        labels_dict = {
+
+        }
+
+
+        self.play(FadeIn(img), run_time=SPEEDUP_TIME)
