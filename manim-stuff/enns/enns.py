@@ -108,24 +108,32 @@ class NNsAndUncertainty(Slide):
         self.wait(0.2)
         self.play(FadeIn(img2, shift = UP), run_time=SPEEDUP_TIME)
         self.next_slide()
-        self.play(FadeOut(img2, shift=UP), FadeOut(source1_text), run_time=SPEEDUP_TIME)
+        self.play(
+            FadeOut(img2, shift=UP), 
+            FadeOut(source1_text),
+            FadeOut(title),
+            FadeOut(problem),
+            FadeOut(box), 
+            run_time=SPEEDUP_TIME)
 
-        text2 = Tex(
-            r"It can be critical for decision making systems to know what they don't know.",
-            font_size=35)
-        self.play(FadeIn(text2), run_time=SPEEDUP_TIME)
-        cite_paper = Tex(
-            (
-                r"\textit{From Predictions to Decisions: The Importance of Joint Predictive Distributions}\\"
-                r"Wen Z. et al. (2022)"
-            ),
-            font_size=25,
-        )
+        # text2 = Tex(
+        #     r"It can be critical for decision making systems to know what they don't know.",
+        #     font_size=35)
+        # self.play(
+        #     FadeIn(text2),
+        #     , run_time=SPEEDUP_TIME)
+        # cite_paper = Tex(
+        #     (
+        #         r"\textit{From Predictions to Decisions: The Importance of Joint Predictive Distributions}\\"
+        #         r"Wen Z. et al. (2022)"
+        #     ),
+        #     font_size=25,
+        # )
 
-        cite_paper.move_to(ORIGIN).shift(DOWN*1)
-        self.play(Write(cite_paper), run_time=SPEEDUP_TIME)
-        self.next_slide()
-        self.play(FadeOut(title), FadeOut(problem), FadeOut(box), FadeOut(text2), FadeOut(cite_paper), run_time=SPEEDUP_TIME)
+        # cite_paper.move_to(ORIGIN).shift(DOWN*1)
+        # self.play(Write(cite_paper), run_time=SPEEDUP_TIME)
+        # self.next_slide()
+        # self.play(FadeOut(title), FadeOut(problem), FadeOut(box), FadeOut(text2), FadeOut(cite_paper), run_time=SPEEDUP_TIME)
 
 
 class JointPredDec(Slide):
@@ -215,7 +223,7 @@ class JointPredictions(Slide):
         all_text = VGroup(system_text, customer_text, inventory_text)
 
         formula_prob_usr_enjoys = MathTex(
-            r"Y_i \sim logit(", r"\phi_{*}^{T}", r"X_i)", font_size=35
+            r"Y_i \sim sig(", r"\phi_{*}^{T}", r"X_i)", font_size=35
         ).next_to(all_mobjects[1], UP, buff=1)
         formula_prob_usr_enjoys[1].set_color(GREEN_C)
 
@@ -272,12 +280,18 @@ class JointPredictions(Slide):
         self.wait(0.5)
 
         # EXAMPLE SLIDES
-        self.play(Write(formula_customer_examples), run_time=SPEEDUP_TIME)
-        self.play(*[Write(item) for item in example_elements], run_time=SPEEDUP_TIME)
+        self.play(
+            Write(formula_customer_examples),
+            *[Write(item) for item in example_elements], 
+            run_time=SPEEDUP_TIME)
         self.next_slide()
 
-        self.play(FadeOut(formula_customer_examples), FadeOut(example_elements), run_time=SPEEDUP_TIME)
-        self.play(FadeOut(all_mobjects), FadeOut(all_text), FadeOut(arrows), run_time=SPEEDUP_TIME)
+        self.play(
+            FadeOut(formula_customer_examples), 
+            FadeOut(example_elements),
+            FadeOut(all_mobjects), 
+            FadeOut(all_text), 
+            FadeOut(arrows), run_time=SPEEDUP_TIME)
 
         # Create table
         table1_data = np.array([[1, 0, 0.73, 0.5], [0, 1, 0.5, 0.73], [0.5, 0.5, 0.62, 0.62]])
@@ -296,13 +310,29 @@ class JointPredictions(Slide):
                 MathTex(r"X_3 = (1, 0)", color=BLUE, font_size=70),
                 MathTex(r"X_4 = (0, 1)", color=BLUE, font_size=70),
             ],
+            include_outer_lines=True,
         ).scale(0.4)
 
         table1.move_to(ORIGIN).shift(DOWN * 0.5)
-        self.play(Create(table1), run_time=SPEEDUP_TIME)
+        self.play(FadeIn(table1), run_time=SPEEDUP_TIME)
         self.wait(0.5)
         self.next_slide()
-        self.play(FadeOut(table1), FadeOut(text_example), FadeOut(formula_prob_usr_enjoys), FadeOut(title), run_time=SPEEDUP_TIME)
+        rect = SurroundingRectangle(table1.get_rows()[3])
+        rect2 = SurroundingRectangle(table1.get_rows()[2])
+        rect3 = SurroundingRectangle(table1.get_rows()[1])
+        self.play(Create(rect))
+        self.next_slide()
+        self.play(FadeOut(rect), Create(rect2), Create(rect3), run_time=SPEEDUP_TIME)
+        self.next_slide()
+
+        self.play(
+            FadeOut(table1), 
+            FadeOut(text_example), 
+            FadeOut(formula_prob_usr_enjoys), 
+            FadeOut(title),
+            FadeOut(rect2),
+            FadeOut(rect3), 
+            run_time=SPEEDUP_TIME)
 
 
 class ENNs(Slide):
@@ -387,11 +417,12 @@ class ENNs(Slide):
             
             run_time=SPEEDUP_TIME,
         )
-        self.play(Create(plot_unif_dist), Create(plot_norm_dist), run_time=1)
+        self.play(Create(plot_unif_dist), Create(plot_norm_dist), run_time=1.5)
         self.wait(1)
 
         self.next_slide()
         self.play(
+            FadeOut(title),
             FadeOut(text_output_to_prob),
             FadeOut(text_joint_predictions),
             FadeOut(formula_output_to_prob_conv),
@@ -403,15 +434,46 @@ class ENNs(Slide):
             run_time=SPEEDUP_TIME,
         )
 
-        #################################################
-        img = (
-            ImageMobject("./media/images/enns/rpf.png").scale(1.3).next_to(title, DOWN).shift(RIGHT*2.12)
-        )
-        source1_text = Tex(r'\textit{Randomized Prior Functions for Deep Reinforcement Learning}, Osband et al. (2018)', font_size=25).next_to(img, DOWN, buff=0.1)
-        self.play(FadeIn(img), FadeIn(source1_text), run_time=SPEEDUP_TIME)
-        self.next_slide()
-        self.play(FadeOut(img), FadeOut(source1_text), FadeOut(title), run_time=SPEEDUP_TIME)
-        self.wait(0.1)
+
+# class TrainingLossFunction(Slide):
+#     def construct(self):
+#         title = Tex(
+#             r"Training Algorithm and Loss Function", font_size=50, color=BLUE
+#         ).to_corner(UP + LEFT)
+#         formula_loss_f = (
+#             MathTex(
+#                 r"\mathcal{l}_{\lambda}^{XENT}(\theta, z, x_i, y_i, i) := -\ln(softmax(f_{\theta}(x_i, z))_{y_i}) + \lambda ||\theta||_{2}^2",
+#                 font_size=30,
+#             )
+#             .move_to(ORIGIN)
+#             .shift(UP * 2)
+#         )
+#         formula_theta = MathTex(
+#             r"\theta = (\zeta, \eta)",
+#             font_size=30,
+#         ).next_to(formula_loss_f, DOWN, buff=0.5)
+
+#         img = (
+#             ImageMobject("./media/images/enns/algorithm.png")
+#             .scale(0.7)
+#             .move_to(ORIGIN)
+#             .shift(DOWN * 1.5)
+#         )
+
+#         self.play(
+#             FadeIn(title),
+#             Write(formula_loss_f),
+#             Write(formula_theta),
+#             FadeIn(img, shift=UP),
+#             run_time=SPEEDUP_TIME,
+#         )
+#         self.next_slide()
+#         self.play(
+#             FadeOut(img),
+#             FadeOut(title),
+#             FadeOut(formula_theta),
+#             FadeOut(formula_loss_f),
+#             run_time=SPEEDUP_TIME)
 
 
 class WhyNotBNNs(Slide):
@@ -426,8 +488,8 @@ class WhyNotBNNs(Slide):
         source = VGroup(source1_text, source1_link).next_to(img, DOWN)
 
         self.play(FadeIn(title), run_time=SPEEDUP_TIME)
-        self.next_slide()
-        self.play(FadeIn(img), run_time=SPEEDUP_TIME)
+        self.play(FadeIn(img, shift=UP), run_time=SPEEDUP_TIME)
+        self.wait(0.2)
         self.play(Write(source), run_time=SPEEDUP_TIME)
         self.next_slide()
         self.play(FadeOut(img), FadeOut(source), FadeOut(title), run_time=SPEEDUP_TIME)
@@ -437,11 +499,13 @@ class Epinet(Slide):
         title = Tex(r"The epinet", font_size=50, color=BLUE).to_corner(UP + LEFT)
 
         text_formula_4 = MathTex(
-            r"f_\theta (x,z)", 
-            r"= ", 
-            r"\mu_{\zeta}(x)", 
-            r"+", 
-            r"\sigma_{\eta}(sg[\phi_\zeta (x)],z)", font_size=40).move_to(ORIGIN)
+            r"f_\theta (x,z)",
+            r"= ",
+            r"\mu_{\zeta}(x)",
+            r"+",
+            r"\sigma_{\eta}(sg[\phi_\zeta (x)],z)",
+            font_size=40,
+        ).move_to(ORIGIN)
 
         brace_enn = BraceLabel(
             obj=text_formula_4[0],
@@ -470,9 +534,13 @@ class Epinet(Slide):
         self.wait(0.5)
         self.play(Write(braces), run_time=SPEEDUP_TIME)
         self.next_slide()
-
         self.play(formula_4.animate.move_to((0, 2, 0)), run_time=SPEEDUP_TIME)
         self.wait(0.5)
+        img = ImageMobject("./media/images/enns/epinet_scheme_simple.png").next_to(formula_4, DOWN, buff=0.1).scale(0.8)
+        self.play(FadeIn(img, shift=UP), run_time=SPEEDUP_TIME)
+        self.wait(0.5)
+        self.next_slide()
+
         formula_epinet_decomposition = MathTex(
             r"\sigma_{\eta}(\tilde x,z)",
             r"=",
@@ -498,10 +566,18 @@ class Epinet(Slide):
             r"\tilde x := sg[\phi_\zeta (x)]", 
             font_size=40
         ).to_edge(LEFT, buff=0.5)
+
+        formula_theta = MathTex(
+            r"\theta = (\zeta, \eta)",
+            font_size=40,
+        ).next_to(formula_x_tilde, DOWN, buff=0.5)
+        self.play(FadeOut(img), run_time=SPEEDUP_TIME)
+        self.wait(0.2)
         self.play(
             Write(formula_epinet_decomposition),
             Write(brace_epinet),
             Write(formula_x_tilde),
+            Write(formula_theta),
             run_time=SPEEDUP_TIME,
         )
         self.wait(0.5)
@@ -510,14 +586,40 @@ class Epinet(Slide):
         self.next_slide()
         animations = AnimationGroup([formula_x_tilde.animate.scale(0.7).move_to([-5, -2, 0]),
                    formula_ep_dec_full.animate.scale(0.7).move_to([-5, 0, 0]),
-                   formula_4.animate.scale(0.7).move_to([-4.5, 2, 0])], lag_ratio=0)
+                   formula_4.animate.scale(0.7).move_to([-4.5, 2, 0]),
+                   formula_theta.animate.scale(0.7).move_to([-5, -3, 0])], lag_ratio=0)
 
         self.play(FadeOut(brace_epinet), run_time=SPEEDUP_TIME)
         self.play(animations, run_time=SPEEDUP_TIME)
-        img = ImageMobject("./media/images/enns/fig4.png").to_edge(RIGHT, buff=0.1).scale(0.7)
-        self.play(FadeIn(img, shift=LEFT), run_time=SPEEDUP_TIME)
+        #################################################
+        img1 = (
+            ImageMobject("./media/images/enns/rpf.png")
+            .scale(1.3)
+            .to_edge(RIGHT, buff=0.1)
+            .scale(0.7)
+        )
+        img2 = ImageMobject("./media/images/enns/fig4.png").to_edge(RIGHT, buff=0.1).scale(0.7)
+        source1_text = Tex(
+            r"\textit{Randomized Prior Functions for Deep Reinforcement Learning},\\ Osband et al. (2018)",
+            font_size=25,
+        ).next_to(img1, DOWN, buff=0.1)
+        self.play(FadeIn(img1, shift=LEFT), FadeIn(source1_text), run_time=SPEEDUP_TIME)
         self.next_slide()
-        self.play(FadeOut(img), run_time=SPEEDUP_TIME)
+        self.play(
+            FadeOut(img1, shift=LEFT), 
+            FadeOut(source1_text, shift=LEFT), 
+            FadeIn(img2, shift=LEFT),
+            run_time=SPEEDUP_TIME
+        )
+        self.wait(0.1)
+        self.next_slide()
+        self.play(FadeOut(img2), run_time=SPEEDUP_TIME)
+
+        self.play(FadeOut(formula_x_tilde), 
+                  FadeOut(formula_ep_dec_full), 
+                  FadeOut(formula_4), 
+                  FadeOut(formula_theta),
+                  run_time=SPEEDUP_TIME)
 
         # training the epinet
         text_training_epinet = (
@@ -534,11 +636,9 @@ class Epinet(Slide):
         ).next_to(formula_training_loss_single_point, DOWN, buff=0.5)
 
         discrete_formula_training_loss = MathTex(
-            r"\frac{1}{\tilde Z} \sum_{z \in \tilde Z} \left( \frac{|D|}{|\tilde D |} \sum_{(x,y) \in \tilde D} L (\theta, z, x, y) + \Psi (\theta, z) \right)",
+            r"\nabla_{\theta} \left(\frac{1}{\tilde Z} \sum_{z \in \tilde Z} \left( \frac{|D|}{|\tilde D |} \sum_{(x,y) \in \tilde D} L (\theta, z, x, y) + \Psi (\theta, z) \right) \right)",
             font_size=30,
         ).next_to(final_formula_training_loss, DOWN, buff=0.5)
-
-        self.play(FadeOut(formula_x_tilde), FadeOut(formula_ep_dec_full), FadeOut(formula_4), run_time=SPEEDUP_TIME)
         self.play(
             FadeIn(formula_training_loss_single_point),
             FadeIn(text_training_epinet),
@@ -549,12 +649,52 @@ class Epinet(Slide):
 
         self.next_slide()
         self.play(
-            FadeOut(text_training_epinet), 
-            FadeOut(formula_training_loss_single_point),
-            FadeOut(final_formula_training_loss), 
             FadeOut(title),
-            FadeOut(discrete_formula_training_loss), 
+            FadeOut(text_training_epinet),
+            FadeOut(formula_training_loss_single_point),
+            FadeOut(final_formula_training_loss),
+            FadeOut(discrete_formula_training_loss),
             run_time=SPEEDUP_TIME
+        )
+
+
+class EpinetTrainingAlgorithm(Slide):
+    def construct(self):
+        title = Tex(
+            r"Training Algorithm and Loss Function", font_size=50, color=BLUE
+        ).to_edge(UP + LEFT)
+        self.play(FadeIn(title), run_time=SPEEDUP_TIME)
+        img = ImageMobject(
+            "./media/images/enns/algorithm.png"
+        ).to_edge(UP, buff=1).scale(0.8)
+        source1_text = Text('"Epistemic Neural Networks",', font_size=15, slant=ITALIC)
+        source1_link = Text(
+            "Osband et al. (2023) - https://arxiv.org/abs/2107.08924", font_size=15
+        ).next_to(source1_text, RIGHT, buff=0.1)
+        training_algo = Group(source1_text, source1_link).next_to(img, DOWN)
+        training_algo.add(img)
+        self.play(FadeIn(training_algo))
+        text_loss_function = (
+            Tex(r"Cross-entropy loss \\ with regularization: ", font_size=20)
+            .next_to(training_algo, DOWN, buff=0.5)
+            .to_edge(LEFT)
+        )
+        formula_loss = (
+            MathTex(
+                r"\mathcal{L}_{\lambda}^{XENT}(\theta, z, x_i, y_i, i) = - \ln(\text{softmax}(f_{\theta}(x_i, z))_{y_i}) + \lambda \left|\left| \theta \right|\right|_2^2"
+            )
+            .scale(0.7)
+            .next_to(text_loss_function, RIGHT, buff=0.5)
+        )
+        self.play(Write(text_loss_function), run_time=SPEEDUP_TIME)
+        self.play(Write(formula_loss), run_time=SPEEDUP_TIME)
+        self.next_slide()
+        self.play(
+            FadeOut(title),
+            FadeOut(training_algo),
+            FadeOut(text_loss_function),
+            FadeOut(formula_loss),
+            run_time=SPEEDUP_TIME,
         )
 
 
@@ -673,17 +813,132 @@ class Experiment2(Slide):
         title = Tex(
             r"Trying to visualize uncertainty", font_size=50, color=BLUE
         ).to_corner(UP + LEFT)
-        
+
         self.add(title)
 
         img = ImageMobject("./media/images/enns/robin.png").to_edge(LEFT, buff=0.1).scale(0.5)
 
+        logits = pd.read_csv("./logit_label_df.csv")
+        # drop indices col
+        logits = logits.drop(logits.columns[0], axis=1)        
+        # round to 1 decimal place
+        logits = logits.round(1)
 
-        #UPDADAPDAPTEUTEPTPUETPPTEEEE logit_labels_df.csv
-        logits = pd.read_csv("./logit_labels_df.csv")
-        labels_dict = {
+        num_frames = len(logits)
 
-        }
+        barchart = BarChart(
+            values = logits.iloc[0].values,
+            bar_names=logits.columns,
+            y_length=4,
+            x_length=5,
+            y_range=[-6, 12, 2],
+        ).move_to([2, -1, 0])
+
+        self.play(
+            FadeIn(barchart),
+            FadeIn(img),
+            run_time=SPEEDUP_TIME)
+        self.next_slide()
+        value_vars = VGroup(
+            DecimalNumber(logits.iloc[0].values[0], num_decimal_places=1),
+            DecimalNumber(logits.iloc[0].values[1], num_decimal_places=1),
+            DecimalNumber(logits.iloc[0].values[2], num_decimal_places=1),
+            DecimalNumber(logits.iloc[0].values[3], num_decimal_places=1),
+        )
+        var1, var2, var3, var4 = value_vars
+
+        def chart_updater_func(mob: BarChart):
+            mob.change_bar_values([
+                var1.get_value(),
+                var2.get_value(),
+                var3.get_value(),
+                var4.get_value(),
+            ])
+            var1.next_to(barchart.bars[0], UP, buff=0.1)
+            var2.next_to(barchart.bars[1], UP, buff=0.1)
+            var3.next_to(barchart.bars[2], UP, buff=0.1)
+            var4.next_to(barchart.bars[3], UP, buff=0.1)
+
+        barchart.add_updater(chart_updater_func, call_updater=True)
+
+        for i in range(1, 5):
+            self.wait(1)
+            self.play(
+                ChangeDecimalToValue(var1, logits.iloc[i].values[0]),
+                ChangeDecimalToValue(var2, logits.iloc[i].values[1]),
+                ChangeDecimalToValue(var3, logits.iloc[i].values[2]),
+                ChangeDecimalToValue(var4, logits.iloc[i].values[3]),
+                run_time=SPEEDUP_TIME,
+            )
+
+        self.next_slide()
 
 
-        self.play(FadeIn(img), run_time=SPEEDUP_TIME)
+class ExperimentPimpa(Slide):
+    def construct(self):
+        title = Tex(
+            r"Trying to visualize uncertainty", font_size=50, color=BLUE
+        ).to_corner(UP + LEFT)
+
+        self.add(title)
+
+        img = (
+            ImageMobject("./media/images/enns/pimpa-screen.png")
+            .to_edge(LEFT, buff=0.1)
+            .scale(0.8)
+        )
+
+        logits = pd.read_csv("./pimpa_label_df.csv")
+        # drop indices col
+        logits = logits.drop(logits.columns[0], axis=1)
+        # round to 1 decimal place
+        logits = logits.round(1)
+
+        num_frames = len(logits)
+
+        barchart = BarChart(
+            values=logits.iloc[0].values,
+            bar_names=logits.columns,
+            y_length=4,
+            x_length=5,
+            y_range=[-6, 12, 2],
+        ).move_to([2, -1, 0])
+
+        self.play(FadeIn(barchart), FadeIn(img), run_time=SPEEDUP_TIME)
+
+        value_vars = VGroup(
+            DecimalNumber(logits.iloc[0].values[0], num_decimal_places=1),
+            DecimalNumber(logits.iloc[0].values[1], num_decimal_places=1),
+            DecimalNumber(logits.iloc[0].values[2], num_decimal_places=1),
+            DecimalNumber(logits.iloc[0].values[3], num_decimal_places=1),
+        )
+        var1, var2, var3, var4 = value_vars
+
+        def chart_updater_func(mob: BarChart):
+            mob.change_bar_values(
+                [
+                    var1.get_value(),
+                    var2.get_value(),
+                    var3.get_value(),
+                    var4.get_value(),
+                ]
+            )
+            var1.next_to(barchart.bars[0], UP, buff=0.1)
+            var2.next_to(barchart.bars[1], UP, buff=0.1)
+            var3.next_to(barchart.bars[2], UP, buff=0.1)
+            var4.next_to(barchart.bars[3], UP, buff=0.1)
+
+        barchart.add_updater(chart_updater_func, call_updater=True)
+
+        for i in range(1, 5):
+            self.wait(1)
+            self.play(
+                ChangeDecimalToValue(var1, logits.iloc[i].values[0]),
+                ChangeDecimalToValue(var2, logits.iloc[i].values[1]),
+                ChangeDecimalToValue(var3, logits.iloc[i].values[2]),
+                ChangeDecimalToValue(var4, logits.iloc[i].values[3]),
+                run_time=SPEEDUP_TIME,
+            )
+
+        self.wait(1)
+        self.next_slide()

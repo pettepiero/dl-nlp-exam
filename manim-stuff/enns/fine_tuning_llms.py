@@ -196,9 +196,9 @@ class ActiveLearningFramework(Slide):
                 )
 
         if(fade_out_circles):
-            self.wait(1.5)
-            self.play(FadeOut(circles), run_time=SPEEDUP_TIME)
-            self.play(*[ApplyMethod(dot.set_color, GRAY) for dot in selected_dots], run_time=SPEEDUP_TIME)
+            if highlight_dots:
+                self.play(FadeOut(circles), run_time=SPEEDUP_TIME)
+                self.play(*[ApplyMethod(dot.set_color, GRAY) for dot in selected_dots], run_time=SPEEDUP_TIME)
 
         if show_line:
             scatter_plot = VGroup(ax, class1_dots, class2_dots, selected_dots, circles, svm_line)
@@ -563,7 +563,6 @@ class PriorityFunctions(Slide):
 
     def construct(self):
         title_priority_functions_small = Tex(r"Priority Functions", font_size=50, color=BLUE).to_edge(UP+LEFT)
-        self.play(FadeIn(title_priority_functions_small), run_time=SPEEDUP_TIME)
 
         priority_fun = PriorityFun(scene=self, position=ORIGIN+UP*1.7)
         priority_fun.create()
@@ -588,6 +587,8 @@ class PriorityFunctions(Slide):
                 formula_p_class_with_z, direction=DOWN, buff=0.7, aligned_edge=LEFT
             )
         )
+
+        self.play(FadeIn(title_priority_functions_small), run_time=SPEEDUP_TIME)
         self.play(*[FadeIn(formula, shift=DOWN) for formula in [formula_p_class_with_z, formula_p_class]], run_time=SPEEDUP_TIME)
         self.next_slide()
 
@@ -709,6 +710,17 @@ class PriorityFunctions(Slide):
         self.next_slide()
         self.play(full_vgroup.animate.shift(UP * 3), run_time=SPEEDUP_TIME)
         self.next_slide()
+
+        text_concept = Tex(
+            r"Prefer examples with \\ high variability w.r.t z",
+            font_size=30,
+        ).next_to(box_enn_priority_functions, direction = LEFT, buff=0.5)
+        self.play(
+            Write(text_concept),
+            run_time=SPEEDUP_TIME
+        )
+        self.next_slide()
+
         self.play(
             FadeOut(title_priority_functions_small),
             FadeOut(full_vgroup),
@@ -723,9 +735,11 @@ class PriorityFunctions(Slide):
                     )
                 ]
             ),
+            FadeOut(text_concept),
+            run_time=SPEEDUP_TIME,
         )
 
-class TrainingAlgorithm(Slide):
+class FTTrainingAlgorithm(Slide):
     def construct(self):
         title = Tex(r"Training Algorithm and Loss Function", font_size=50, color=BLUE).to_edge(UP+LEFT)
         self.play(FadeIn(title), run_time=SPEEDUP_TIME)
@@ -739,7 +753,6 @@ class TrainingAlgorithm(Slide):
         training_algo = Group(source1_text, source1_link).next_to(img, DOWN)
         training_algo.add(img)
         self.play(FadeIn(training_algo))
-        self.next_slide()
         text_loss_function = Tex(r"Cross-entropy loss \\ with regularization: ", font_size=20).next_to(training_algo, DOWN, buff=0.5).to_edge(LEFT)
         formula_loss = (
             MathTex(
@@ -750,6 +763,13 @@ class TrainingAlgorithm(Slide):
         )
         self.play(Write(text_loss_function), run_time=SPEEDUP_TIME)
         self.play(Write(formula_loss), run_time=SPEEDUP_TIME)
+        self.next_slide()
+        self.play(
+            FadeOut(title),
+            FadeOut(training_algo),
+            FadeOut(text_loss_function),
+            FadeOut(formula_loss),
+            run_time=SPEEDUP_TIME)
 
 class ComparisonActiveLearningAgents(Slide):
     def construct(self):
@@ -1030,11 +1050,11 @@ class LMExperiment(Slide):
             font_size=30
         ).next_to(agents_img, DOWN, buff=0.5)
 
-        self.play(FadeIn(agents_img), FadeIn(formula_epinet), run_time=SPEEDUP_TIME)
-        self.next_slide()
+        # self.play(FadeIn(agents_img), FadeIn(formula_epinet), run_time=SPEEDUP_TIME)
+        # self.next_slide()
         self.play(
-            FadeOut(agents_img), 
-            FadeOut(formula_epinet), 
+            # FadeOut(agents_img), 
+            # FadeOut(formula_epinet), 
             FadeOut(text_title),
             run_time=SPEEDUP_TIME)
         self.next_slide()
@@ -1081,17 +1101,41 @@ class Conclusion(Slide):
         title = Tex(
             r"Conclusion", font_size=50, color=BLUE
         ).to_edge(UP + LEFT)
-        text_conclusion = BulletedList(
-            r"Uncertainty in NNs is important for decision-making systems and active learning",
-            r"Problem of active learning in fine-tuning language models",
-            r"ENNs are an efficient alternative to classical Bayesian methods",
-            r"Adding epistemic uncertainty estimates to language models is possible in a computationally tractable manner",
-            font_size=30
+        subtitle_pros = Tex(
+            r"Pros", font_size=30, color=GREEN
         ).next_to(title, DOWN, buff=0.5, aligned_edge=LEFT)
+        pros = BulletedList(
+            r"Uncertainty in NNs is important for decision-making systems and active learning",
+            r"ENNs are an efficient alternative to classical Bayesian methods",
+            r"Language model fine tuning is possible in a more computationally tractable manner (OpenAI)",
+            font_size=30
+        ).next_to(subtitle_pros, DOWN, buff=0.5, aligned_edge=LEFT)
+        subtitle_cons = Tex(
+            r"Cons", font_size=30, color=RED
+        ).next_to(pros, DOWN, buff=0.5, aligned_edge=LEFT)
+        cons = BulletedList(
+            r"Choice of reference distribution is arbitrary",
+            r"Difficult to measure the uncertainty",
+            r"Open source code in Haiku and JAX",
+            r"Unclear how to train with epinet", 
+            font_size=30,
+        ).next_to(subtitle_cons, DOWN, buff=0.5, aligned_edge=LEFT)
         self.play(FadeIn(title), run_time=SPEEDUP_TIME)
-        self.play(Write(text_conclusion), run_time=SPEEDUP_TIME)
+        self.play(
+            Write(subtitle_pros),
+            Write(pros),
+            Write(subtitle_cons),
+            Write(cons),
+            run_time=SPEEDUP_TIME,
+        )
         self.next_slide()
-        self.play(FadeOut(title), FadeOut(text_conclusion), run_time=SPEEDUP_TIME)
+        self.play(
+            FadeOut(title),
+            FadeOut(subtitle_pros), 
+            FadeOut(pros),
+            FadeOut(subtitle_cons),
+            FadeOut(cons), 
+            run_time=SPEEDUP_TIME)
         self.next_slide()
 
 
@@ -1103,8 +1147,8 @@ class References(Slide):
 
         refs_blist = BulletedList(
             # r"Balaji Lakshminarayanan. \textit{Introduction to Uncertainty in Deep Learning}. https://www.gatsby.ucl.ac.uk/~balaji/balaji-uncertainty-talk-cifar-dlrl.pdf",
-            r"Osband et al. (2023). \textit{Epistemic Neural Networks}. arXiv:2107.08924.",
-            r"Wen et al. (2022). \textit{From Predictions to Decisions: The Importance of Joint Predictive Distributions}. arXiv:2107.09224",
+            r"Osband et al. (2021). \textit{Epistemic Neural Networks}. arXiv:2107.08924.",
+            r"Wen et al. (2021). \textit{From Predictions to Decisions: The Importance of Joint Predictive Distributions}. arXiv:2107.09224",
             r"Osband et al. (2022). \textit{Fine-Tuning Language Models via Epistemic Neural Networks}. arXiv:2211.01568",
             r"GLUE Benchmark https://gluebenchmark.com/",
             r"textit{TalkRL: The Reinforcement Learning Podcast} - Ian Osband episode https://www.talkrl.com/episodes/ian-osband",

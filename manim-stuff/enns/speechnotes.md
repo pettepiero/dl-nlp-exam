@@ -1,5 +1,6 @@
 # Epistemic Neural Network slides
 ## Neural Networks and Uncertainty
+Today I would like to talk about **uncertainty**.
 The problem that Osband tackles and has tackled in lots of his articles is that of uncertainty in Neural Networks. In this presentation, I will walk through some of his latest work and try to expose his ideas in an ordered way. My goal is to try to understand what Epistemic Neural Networks are and why they have been created.
 
 Let's start by recognizing that conventional NNs don't have the ability to dinstinguish between two types of uncertainty:
@@ -55,14 +56,6 @@ It is the index $z$ that is used to express epistemic uncertainty. In particular
 So in ENNs, when you make predictions, you use the same epistemic index $z$ across multiple predictions, therefore the joint is not equal to the product of the marginals anymore.
 
   
-The idea comes from another paper from Osband, called *Randomized Prior Functions for Deep Reinforcement Learning*. Each plot is a particle of an ensemble of size 4. In each plot we show the effect of training a NN on the same datapoints (dots). The light yellow lines are the different prior functions for each particle. Then we add a trainable network (dashed lines) so that the resulting prediction (the sum) in blue, goes through all the points. The first plot would be $z_1$, the secondo $z_2$ and so on. **The different particles all agree on the training data, but they generalize differently depending on the effect of the learnt network and the prior.**
-
-The idea is that if we change $z$, we can have different predictions and therefore we are uncertain. 
-
-> How is the prior initialized? Not much info about that, but "such that the initial variation in $z$ reflects your uncertainty. After training, the resulting variation in $z$ is meant to be something like a posterior.
-> The design, initialization and scaling of the prior network $\sigma^P$ allows an algorithm designer to encode prior beliefs, and is essential for good performance. Typical choices might include $\sigma^P$ sampled from the same architecture as $\sigma^L$ but with different parameters.
-
-
 **Isn't this just training an ensemble? What is the benefit?**
 
 
@@ -86,7 +79,13 @@ The epinet can be split in two separate pieces: $$\sigma_\eta (\tilde x ,z) = \s
 
 The first one is learnable and in the paper takes the form of a simple MLP. The second one has no parameters and is reflects the prior uncertainty. After training, the resulting variation in $z$ is meant to be something like a posterior. We need to set up a prior if we want the network to use the epistemic index $z$. After the training of 
 
+The idea comes from another paper from Osband, called *Randomized Prior Functions for Deep Reinforcement Learning*. Each plot is a particle of an ensemble of size 4. In each plot we show the effect of training a NN on the same datapoints (dots). The light yellow lines are the different prior functions for each particle. Then we add a trainable network (dashed lines) so that the resulting prediction (the sum) in blue, goes through all the points. The first plot would be $z_1$, the secondo $z_2$ and so on. **The different particles all agree on the training data, but they generalize differently depending on the effect of the learnt network and the prior.**
 
+The idea is that if we change $z$, we can have different predictions and therefore we are uncertain. 
+
+> How is the prior initialized? Not much info about that, but "such that the initial variation in $z$ reflects your uncertainty. A typical example is using the same architecture as the trainable $\sigma^P$ but with different parameters.
+> 
+> The design, initialization and scaling of the prior network $\sigma^P$ allows an algorithm designer to encode prior beliefs, and is essential for good performance. Typical choices might include $\sigma^P$ sampled from the same architecture as $\sigma^L$ but with different parameters.
 
 
 ## Training algorithm
