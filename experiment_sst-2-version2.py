@@ -29,8 +29,9 @@ from enn.networks import forwarders
 from enn.networks.bert.bert_classification_enn import (
     create_enn_bert_for_classification_ft,
 )
-from enn.networks.bert.base import BertInput
+from enn.networks.bert.base import BertInput, BertEnn
 import haiku as hk
+import numpy as np
 import jax
 import jax.numpy as jnp
 from jax.random import PRNGKey
@@ -114,56 +115,119 @@ def featurizer_fn(tokens, training=False):
 ########################################################################
 # Active Learning Experiment
 class ActiveLearningSST2:
+
     def __init__(
         self,
-        enn_config: agents.VanillaEnnConfig,
-        model_fn,
+        enn: BertEnn,
+        # model_fn,
+        priority_fn: str = "uniform",
         learning_rate=1e-3,
         batch_size=32,
+        learning_batch_size: int = 8,
+        num_enn_samples: int = 20,
+        num_steps: int = 100,
         seed=0,
     ):
         self.tokenizer = huggingface_tokenizer
         self.dataset = load_dataset("nyu-mll/glue", "sst2")
         self.learning_rate = learning_rate
         self.batch_size = batch_size
+        self.learning_batch_size = learning_batch_size
         self.rng = hk.PRNGSequence(seed)
-        self.model_fn = hk.transform(model_fn)
+        # self.model_fn = hk.transform(model_fn)
+        self.num_enn_samples = num_enn_samples
+        self.num_steps = num_steps
         self.replay = []
 
         # Initialize ENN
-        self.enn = enn_config.enn_ctor()
-        dummy_input = jnp.ones([1, 512], dtype=jnp.int32)
+        self.enn = enn
+        # dummy_input = jnp.ones([1, 512], dtype=jnp.int32)
+
+        # Take a real sentence from the dataset
+        example = self.dataset["train"][0]["sentence"]
+
+        # Tokenize with huggingface tokenizer
+        tokenized = self.tokenizer(
+            example,
+            padding="max_length",
+            truncation=True,
+            max_length=512,
+            return_tensors="np"
+        )
+        # Handle missing segment_ids (token_type_ids)
+        if "token_type_ids" not in tokenized:
+            tokenized["token_type_ids"] = np.zeros_like(tokenized["input_ids"])
+
+        # Build BertInput
+        dummy_input = BertInput(
+            token_ids=tokenized["input_ids"],
+            segment_ids=tokenized["token_type_ids"],
+            input_mask=tokenized["attention_mask"],
+        )
+
+        print("DEBUG: calling self.enn.init(...)")
         self.params, self.state = self.enn.init(
             next(self.rng), dummy_input, self.enn.indexer(next(self.rng))
         )
+        print("DEBUG: --")
         self.opt_state = optax.adam(learning_rate).init(self.params)
 
+        entropy_priority_ctor = priorities.get_priority_fn_ctor(priority_fn)
+
         # Prepare ENN forwarder and priority function
-        self.enn_batch_fwd = forwarders.make_batch_fwd(self.enn, num_enn_samples=20)
-        self.priority_fn = priorities.make_priority_fn_ctor(priorities.entropy_priority)(
-            self.enn_batch_fwd
+        self.enn_batch_fwd = forwarders.make_batch_fwd(
+            self.enn, num_enn_samples=self.num_enn_samples
         )
+        # self.priority_fn = priorities.make_priority_fn_ctor(entropy_priority_ctor)(
+        #     self.enn_batch_fwd
+        # )
+
+        self.priority_fn = entropy_priority_ctor(self.enn_batch_fwd)
 
     def tokenize(self, texts):
         tokens = self.tokenizer(
-            texts, padding=True, truncation=True, return_tensors="np"
+            texts,
+            padding="max_length",
+            max_length=512,
+            truncation=True,
+            return_tensors="np",
         )
-        return tokens["input_ids"], tokens["attention_mask"]
+        # Handle missing segment_ids (token_type_ids)
+        if "token_type_ids" not in tokens:
+            tokens["token_type_ids"] = np.zeros_like(tokens["input_ids"])
+
+        return tokens["input_ids"], tokens["token_type_ids"], tokens["attention_mask"]
 
     def loss_fn(self, params, state, batch):
-        index = self.enn.indexer(next(self.rng))
-        net_out, state = self.enn.apply(params, state, batch["input_ids"], index)
-        logits = net_out.output
-        labels = jax.nn.one_hot(batch["labels"], 2)
-        loss = optax.softmax_cross_entropy(logits, labels).mean()
-        return loss, state
+        # Averages the loss over epistemic indices
+        def single_index_loss(index):
+            net_out, new_state = self.enn.apply(params, state, batch["x"], index)
+            logits = net_out.output
+            labels = jax.nn.one_hot(batch["y"], 2)
+            loss = optax.softmax_cross_entropy(logits, labels).mean()
+            return loss
+
+        indices = [self.enn.indexer(next(self.rng)) for _ in range(self.num_enn_samples)]
+        loss_values = jax.vmap(single_index_loss)(jnp.array(indices))
+        mean_loss = jnp.mean(loss_values)
+        return mean_loss, state
+
+        # index = self.enn.indexer(next(self.rng))
+        # net_out, state = self.enn.apply(params, state, batch["input_ids"], index)
+        # logits = net_out.output
+        # labels = jax.nn.one_hot(batch["labels"], 2)
+        # loss = optax.softmax_cross_entropy(logits, labels).mean()
+        # return loss, state
 
     def update(self, batch):
+        # 5: compute minibatch gradient
+
         grad_fn = jax.value_and_grad(self.loss_fn, has_aux=True)
         (loss, state), grads = grad_fn(self.params, self.state, batch)
         updates, self.opt_state = optax.adam(self.learning_rate).update(
             grads, self.opt_state
         )
+        # 6: update parameters
         self.params = optax.apply_updates(self.params, updates)
         self.state = state
         return loss
@@ -175,21 +239,95 @@ class ActiveLearningSST2:
         selected_indices = jnp.argsort(scores)[-num_samples:]
         return [pool[i] for i in selected_indices]
 
-    def run(self, num_steps=100):
-        for step in range(num_steps):
-            # Select a batch with highest uncertainty from full training set
-            raw_batch = self.select_uncertain_samples(
-                self.dataset["train"], self.batch_size
+    def run(self):
+        # Numbered comments are based on algorithm 1 of Fine tuning paper.
+        # Pre-load all data into JAX-compatible arrays
+        train_labels = jnp.array(self.dataset['train']['label'])
+        num_samples = len(train_labels)
+        all_indices = jnp.arange(num_samples)
+
+        for step in range(self.num_steps):
+            # 2: Sample batch_size candidate indices without replacement
+            cand_indices = jax.random.choice(
+                key=next(self.rng),
+                a=all_indices,
+                shape=(self.batch_size,),
+                replace=False
             )
 
-            # Tokenize and format batch
-            input_ids, _ = self.tokenize([ex["sentence"] for ex in raw_batch])
-            labels = jnp.array([ex["label"] for ex in raw_batch])
-            batch = {"input_ids": input_ids, "labels": labels}
+            cand_indices_list = [int(i) for i in cand_indices]
 
-            # Train on selected batch
-            loss = self.update(batch)
+            # Get batch directly using JAX array indexing
+            batch_sentences = [self.dataset['train'][i]['sentence'] for i in cand_indices_list]
+            cand_input_ids = self.tokenize(batch_sentences)
+
+            input = BertInput(
+                token_ids=cand_input_ids[0],
+                segment_ids=cand_input_ids[1],
+                input_mask=cand_input_ids[2],
+            )
+
+            # Create ArrayBatch
+            cand_batch = datasets.ArrayBatch(
+                x=input, 
+                y=train_labels[cand_indices]
+            )
+
+            # dummy_input = BertInput(
+            #     token_ids=cand_input_ids,
+            #     segment_ids=tokenized["token_type_ids"],
+            #     input_mask=tokenized["attention_mask"],
+            # )
+
+            # 3: select the learning_batch_size indices with highest priority
+            batch_priorities, _ = self.priority_fn(
+                self.params,
+                self.state,
+                cand_batch,
+                next(self.rng),
+            )
+
+            # Select top-k highest priority samples
+            top_k_indices = jnp.argsort(-batch_priorities)[:self.learning_batch_size]
+            print(f"\n\nDEBUG: top_k_indices = \n{top_k_indices}")
+            selected_input_ids = cand_input_ids[top_k_indices]
+            selected_labels = train_labels[cand_indices][top_k_indices]
+
+            train_batch = datasets.ArrayBatch(
+                x=selected_input_ids,
+                y=selected_labels
+            )
+            loss = self.update(train_batch)
             print(f"Step {step}: Loss = {loss:.4f}")
+
+        # for step in range(self.num_steps):
+        #     # 2: Sample batch_size candidate indices without replacement
+        #     cand_indices = jnp.random.choice(
+        #         a=[i for i in range(self.dataset['train'].num_rows)],
+        #         size=self.batch_size,
+        #         replace=False,
+        #         )
+        #     print(f"DEBUG: step {step}: candidate indices = {cand_indices}")
+        #     cand_batch = datasets.ArrayBatch(
+        #         x=self.dataset['train'][cand_indices]['sentence'],
+        #         y=self.dataset['train'][cand_indices]['label']
+        #     )
+
+        #     # 3: Select learning_batch_size indices with highest priority
+
+        #     # Select a batch with highest uncertainty from full training set
+        #     raw_batch = self.select_uncertain_samples(
+        #         self.dataset["train"], self.batch_size
+        #     )
+
+        #     # Tokenize and format batch
+        #     input_ids, _ = self.tokenize([ex["sentence"] for ex in raw_batch])
+        #     labels = jnp.array([ex["label"] for ex in raw_batch])
+        #     batch = {"input_ids": input_ids, "labels": labels}
+
+        #     # Train on selected batch
+        #     loss = self.update(batch)
+        #     print(f"Step {step}: Loss = {loss:.4f}")
 
 
 def _make_test_problem(
@@ -251,7 +389,7 @@ def _clean_results(results: tp.Dict[str, tp.Any]) -> tp.Dict[str, tp.Any]:
     return results
 
 
-if __name__ == "__main__":
+def test_code():
 
     # 1. Load the SST-2 dataset (train pool)
     sst2 = load_dataset("glue", "sst2")
@@ -259,7 +397,7 @@ if __name__ == "__main__":
     train_labels = jnp.array(sst2['train']['label'])
 
     # Just take a small pool for now
-    N = 256
+    N = 64
     texts_pool = train_texts[:N]
     labels_pool = train_labels[:N]
 
@@ -281,7 +419,7 @@ if __name__ == "__main__":
 
     encoded = huggingface_tokenizer(
         texts_pool,
-        padding="max_length",   
+        padding="max_length",
         truncation=True,
         max_length=128,
         return_tensors="np"  # return NumPy arrays to convert easily to jnp
@@ -293,8 +431,60 @@ if __name__ == "__main__":
         input_mask=jnp.array(encoded["attention_mask"]),
     )
 
+    # bert_input = {
+    #     "token_ids": jnp.array(encoded["input_ids"]),
+    #     "segment_ids": jnp.array(encoded["token_type_ids"]),
+    #     "input_mask": jnp.array(encoded["attention_mask"]),
+    # }
+
+    init_input = SimpleNamespace(
+        token_ids=bert_input.token_ids[:1],
+        segment_ids=bert_input.segment_ids[:1],
+        input_mask=bert_input.input_mask[:1],
+    )
+
+    # Note: Create a list of SimpleNamespace for each example
+    # x_full = [
+    #     SimpleNamespace(
+    #         token_ids=jnp.array(encoded["input_ids"][i]),
+    #         segment_ids=jnp.array(encoded["token_type_ids"][i]),
+    #         input_mask=jnp.array(encoded["attention_mask"][i])
+    #     )
+    #     for i in range(len(encoded["input_ids"]))
+    # ]
+
+    x_full = [
+        BertInput(
+            token_ids=jnp.array(encoded["input_ids"][i]),
+            segment_ids=jnp.array(encoded["token_type_ids"][i]),
+            input_mask=jnp.array(encoded["attention_mask"][i]),
+        )
+        for i in range(len(encoded['input_ids']))
+    ]
+
+    # Replace the SimpleNamespace with a dictionary or tuple structure
+    # x_full = {
+    #     'token_ids': jnp.array(encoded["input_ids"]),
+    #     'segment_ids': jnp.array(encoded["token_type_ids"]),
+    #     'input_mask': jnp.array(encoded["attention_mask"])
+    # }
+
+    # Create the batch
+    # batch = datasets.ArrayBatch(x=x_full, y=jnp.array(y_pool))
+
+    # When creating your batch, use BertInput instead of SimpleNamespace
+    batch = BertInput(
+        token_ids=jnp.array(encoded["input_ids"]),  # Convert to JAX array
+        segment_ids=jnp.array(encoded["token_type_ids"]),
+        input_mask=jnp.array(encoded["attention_mask"]),
+        extra={}  # Empty dict unless you have additional inputs
+    )
+
+    # Then create your ArrayBatch with this input
+    batch = datasets.ArrayBatch(x=batch, y=jnp.array(y_pool))
+
     # Make batch
-    batch = datasets.ArrayBatch(x=jnp.array(x_pool), y=jnp.array(y_pool))
+    # batch = datasets.ArrayBatch(x=jnp.array(x_pool), y=jnp.array(y_pool))
 
     # 3. Create the ENN model
     enn_model, haiku_params, haiku_state = create_enn_bert_for_classification_ft()
@@ -304,14 +494,17 @@ if __name__ == "__main__":
     print(f"\n\nDEBUG: x_pool = {x_pool}\n\n")
 
     # params, state = enn_model.init(key, x_pool[:1], enn_model.indexer(key))
-    params, state = enn_model.init(key, bert_input, enn_model.indexer(key))
+    params, state = enn_model.init(key, init_input, enn_model.indexer(key))
 
+    print(f"DEBUG: enn_model.init done!")
     # 4. Create forwarder
     enn_batch_fwd = make_batch_fwd(enn_model, num_enn_samples=100, seed=42)
-
+    print("make_batch_fwd done!")
     # 5. Define acquisition strategy (e.g., predictive variance)
     per_example_priority = priorities.get_per_example_priority('variance')
+    print("get_per_example_priority done!")
     priority_fn_ctor = priorities.make_priority_fn_ctor(per_example_priority)
+    print("make_priority_fn_ctor done!")
 
     # 6. Create PrioritizedBatcher
     batcher = prioritized.PrioritizedBatcher(
@@ -320,8 +513,10 @@ if __name__ == "__main__":
         priority_fn_ctor=priority_fn_ctor
     )
 
-    print(f"\n\nDEBUG: batch = \n{batch}\n\n")
-
+    print(f"\n\nDEBUG: type(batch) = {type(batch)}")
+    print(f"\n\nDEBUG: len(batch.x) = \n{len(batch.x)}\n\n")
+    print(f"\n\nDEBUG: len(batch.y) = \n{len(batch.y)}\n\n")
+    print(f"\n\nDEBUG: bert_input = \n{bert_input}\n\n")
     # 7. Run 1 acquisition step
     key = jax.random.PRNGKey(1)
     acquired_batch = batcher.sample_batch(params, state, batch, key)
@@ -433,3 +628,17 @@ if __name__ == "__main__":
     # params = roberta.init(rng, sample_tokens, training=False)
     # contextual_embedding = jax.jit(roberta.apply)(params, rng, sample_tokens)
     # print(contextual_embedding.shape)
+
+
+if __name__ == "__main__":
+
+    enn_model, haiku_params, haiku_state = create_enn_bert_for_classification_ft()
+
+    print("After create_enn_bert_for_classification")
+
+    experiment = ActiveLearningSST2(
+        enn=enn_model,
+        priority_fn='entropy',
+    )
+
+    experiment.run()
