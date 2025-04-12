@@ -18,6 +18,7 @@ import os
 import matplotlib.pyplot as plt
 import functools
 import typing as tp
+from tqdm import tqdm
 import joblib
 import requests
 from acme.utils import loggers
@@ -107,10 +108,10 @@ class ActiveLearningSST2:
         enn: BertEnn,
         # model_fn,
         priority_fn: str = "uniform",
-        learning_rate=1e-5,
-        batch_size=2,
-        learning_batch_size: int = 1,
-        num_enn_samples: int = 5,
+        learning_rate=1e-3,
+        batch_size=40,
+        learning_batch_size: int = 4,
+        num_enn_samples: int = 10,
         num_steps: int = 100,
         seed=0,
     ):
@@ -151,26 +152,26 @@ class ActiveLearningSST2:
             input_mask=tokenized["attention_mask"],
         )
 
-        print("DEBUG: calling self.enn.init(...)")
+#        print("DEBUG: calling self.enn.init(...)")
         self.params, self.state = self.enn.init(
             next(self.rng), dummy_input, self.enn.indexer(next(self.rng))
         )
-        print("DEBUG: --")
+#        print("DEBUG: --")
         self.opt_state = optax.adam(learning_rate).init(self.params)
         entropy_priority_ctor = priorities.get_priority_fn_ctor(priority_fn)
 
-        print(f"DEBUG: created priority function constructor")
+#        print(f"DEBUG: created priority function constructor")
 
         # Prepare ENN forwarder and priority function
         self.enn_batch_fwd = forwarders.make_batch_fwd(
             self.enn, num_enn_samples=self.num_enn_samples
         )
 
-        print(f"DEBUG: prepared ENN forwarder")
+#        print(f"DEBUG: prepared ENN forwarder")
 
         self.priority_fn = entropy_priority_ctor(self.enn_batch_fwd)
 
-        print(f"DEBUG: Finished ActiveLearningSST2.__init__()")
+#        print(f"DEBUG: Finished ActiveLearningSST2.__init__()")
 
     def tokenize(self, texts):
         tokens = self.tokenizer(
@@ -190,10 +191,10 @@ class ActiveLearningSST2:
         # Averages the loss over epistemic indices
         def single_index_loss(index):
             net_out, new_state = self.enn.apply(params, state, batch["x"], index)
-            logits = net_out.output
+            logits = net_out.train
             labels = jax.nn.one_hot(batch["y"], 2)
-            print(f"DEBUG: in loss_fn: logits.shape = {logits.shape}")
-            print(f"DEBUG: in loss_fn: labels.shape = {labels.shape}")
+#            print(f"DEBUG: in loss_fn: logits.shape = {logits.shape}")
+#            print(f"DEBUG: in loss_fn: labels.shape = {labels.shape}")
             loss = optax.softmax_cross_entropy(logits, labels).mean()
             return loss
 
@@ -222,17 +223,16 @@ class ActiveLearningSST2:
         selected_indices = jnp.argsort(scores)[-num_samples:]
         return [pool[i] for i in selected_indices]
 
-    def run(self):
+    def run(self) -> list:
         # Numbered comments are based on algorithm 1 of Fine tuning paper.
         # Pre-load all data into JAX-compatible arrays
         train_labels = jnp.array(self.dataset['train']['label'])
         num_samples = len(train_labels)
         all_indices = jnp.arange(num_samples)
 
-        print(f"DEBUG: setup of loop done")
+#        print(f"DEBUG: setup of loop done")
         losses = []
-
-        for step in range(self.num_steps):
+        for step in tqdm(range(self.num_steps)):
             # 2: Sample batch_size candidate indices without replacement
             cand_indices = jax.random.choice(
                 key=next(self.rng),
@@ -243,14 +243,14 @@ class ActiveLearningSST2:
 
             cand_indices_list = [int(i) for i in cand_indices]
 
-            print(f"DEBUG: sampled candidate indices")
-            print(f"DEBUG: candidate indices: {cand_indices_list}")
+#            print(f"DEBUG: sampled candidate indices")
+#            print(f"DEBUG: candidate indices: {cand_indices_list}")
             # Get batch directly using JAX array indexing
             batch_sentences = [self.dataset['train'][i]['sentence'] for i in cand_indices_list]
-            print(f"DEBUG: candidate batch_sentences: \n{batch_sentences}")
+#            print(f"DEBUG: candidate batch_sentences: \n{batch_sentences}")
             cand_input_ids = self.tokenize(batch_sentences)
-            print(f"DEBUG: cand_input_ids = \n{cand_input_ids}")
-            print(f"DEBUG: Tokenization done")
+#            print(f"DEBUG: cand_input_ids = \n{cand_input_ids}")
+#            print(f"DEBUG: Tokenization done")
 
             input = BertInput(
                 token_ids=cand_input_ids['input_ids'],
@@ -264,10 +264,10 @@ class ActiveLearningSST2:
                 y=train_labels[cand_indices]
             )
 
-            print(f"DEBUG: Created ArrayBatch")
-            print(f"\n\nDEBUG: candidate batch dimensions:")
-            print(f"DEBUG: cand_batch.x = \n{cand_batch.x}")
-            print(f"DEBUG: cand_batch.x.token_ids.shape = \n{cand_batch.x.token_ids.shape}")
+#            print(f"DEBUG: Created ArrayBatch")
+#            print(f"\n\nDEBUG: candidate batch dimensions:")
+#            print(f"DEBUG: cand_batch.x = \n{cand_batch.x}")
+#            print(f"DEBUG: cand_batch.x.token_ids.shape = \n{cand_batch.x.token_ids.shape}")
 
             # 3: select the learning_batch_size indices with highest priority
             batch_priorities, _ = self.priority_fn(
@@ -277,11 +277,11 @@ class ActiveLearningSST2:
                 next(self.rng),
             )
 
-            print(f"DEBUG: Got batch priorities")
+#            print(f"DEBUG: Got batch priorities")
 
             # Select top-k highest priority samples
             top_k_indices = jnp.argsort(-batch_priorities)[:self.learning_batch_size]
-            print(f"\n\nDEBUG: top_k_indices = \n{top_k_indices}")
+#            print(f"\n\nDEBUG: top_k_indices = \n{top_k_indices}")
             selected_input = BertInput(
                 token_ids=cand_input_ids["input_ids"][top_k_indices],
                 segment_ids=cand_input_ids["token_type_ids"][top_k_indices],
@@ -295,50 +295,38 @@ class ActiveLearningSST2:
             )
             loss = self.update(train_batch)
             losses.append(loss)
-            print(f"Step {step}: Loss = {loss:.4f}")
-            return losses
-
-def _clean_results(results: tp.Dict[str, tp.Any]) -> tp.Dict[str, tp.Any]:
-    """Cleans the results for logging (can't log jax arrays)."""
-
-    def clean_result(value: tp.Any) -> tp.Any:
-        value = loggers.to_numpy(value)
-        if isinstance(value, chex.ArrayNumpy) and value.size == 1:
-            value = float(value)
-        return value
-
-    for key, value in results.items():
-        results[key] = clean_result(value)
-
-    return results
-
+        
+        return losses
 
 def plot_loss_curve(losses: list, save_path: str):
     """
-    Plot the losses and save to image
+        Plot the losses and save to image
     """
-    available_priorities = ["uniform", "entropy", "margin", "bald", "variance"]
+    available_priorities = [
+        'uniform',
+        'entropy',
+        'margin',
+        'bald',
+        'variance'
+    ]
     matched_priority = next((p for p in available_priorities if p in save_path), None)
     if matched_priority:
-        title = f"Training Loss over steps using {matched_priority}"
+        title = f"Training Loss over steps using {matched_priority}"    
     else:
-        print(
-            "Error in plot_loss_curve, save_path must contain"
-            "one of the available priority functions"
-        )
+        print("Error in plot_loss_curve, save_path must contain" 
+            "one of the available priority functions")
         return
-    plt.figure(figsize=(8, 5))
-    plt.plot(losses, label="Training Loss", color="blue")
-    plt.xlabel("Training Step")
-    plt.ylabel("Loss")
+    plt.figure(figsize=(8,5))
+    plt.plot(losses, label='Training Loss', color='blue')
+    plt.xlabel('Training Step')
+    plt.ylabel('Loss')
     plt.title(title)
     plt.legend()
     plt.grid(True)
+    plt.ylim((0, 3))
     plt.tight_layout()
     plt.savefig(save_path)
     plt.close()
-    print(f"✅ Loss curve saved to {save_path}")
-
 
 def save_loss_to_file(losses: list, save_path: str):
     """
@@ -350,16 +338,18 @@ def save_loss_to_file(losses: list, save_path: str):
     """
     # Ensure the directory exists
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
-
+    
     # Write losses to the file
-    with open(save_path, "w") as f:
+    with open(save_path, 'w') as f:
         for loss in losses:
             f.write(f"{loss}\n")
 
-    print(f"Losses saved to {save_path}")
-
 
 if __name__ == "__main__":
+    print(f"JAX devices list: ", jax.devices())
+    print(f"JAX devices:", jax.devices()[0].device_kind)
+
+    print("Creating ENN BERT for classification...")
 
     print("Creating ENN BERT for classification...")
 
@@ -376,15 +366,12 @@ if __name__ == "__main__":
     ]
 
     for priority in priorities_to_test:
+        print(f"\nTraining using '{priority}' priority function")
         experiment = ActiveLearningSST2(
             enn=enn_model,
             priority_fn=priority,
         )
         losses = experiment.run()
         plot_loss_curve(losses, priority)
-        save_loss_to_file(losses, priority)
+        save_loss_to_file(losses, f'./{priority}.txt')
 
-    print(f"DEBUG: Running experiment...")
-
-    experiment.run()
-    print(f"DEBUG: Experiment done")
