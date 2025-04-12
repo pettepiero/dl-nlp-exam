@@ -318,10 +318,10 @@ if __name__ == "__main__":
 
     # Initialize model
     key = jax.random.PRNGKey(0)
-    params, state = enn.init(key, x_pool[:1], enn.indexer(key))
+    params, state = enn_model.init(key, x_pool[:1], enn_model.indexer(key))
 
     # 4. Create forwarder
-    enn_batch_fwd = make_batch_fwd(enn, num_enn_samples=100, seed=42)
+    enn_batch_fwd = make_batch_fwd(enn_model, num_enn_samples=100, seed=42)
 
     # 5. Define acquisition strategy (e.g., predictive variance)
     per_example_priority = priorities.get_per_example_priority('variance')

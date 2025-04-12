@@ -57,6 +57,7 @@ huggingface_roberta = BertModel.from_pretrained(
 # "roberta-base", output_hidden_states=True, return_dict=False
 # )
 
+
 ########################################################################
 # Define the transformer model
 class RobertaFeaturizer(hk.Module):
@@ -73,14 +74,17 @@ class RobertaFeaturizer(hk.Module):
             )
         return x
 
+
 ########################################################################
 # Functions to load the pretrained weights
+
 
 # Some light postprocessing to make the parameter keys a bit more concise
 def postprocess_key(key):
     return (
         key.replace("model/featurizer/bert/", "").replace(":0", "").replace("self/", "")
     )
+
 
 # Cache the downloaded file to go easy on the tubes
 @functools.lru_cache()
@@ -138,7 +142,7 @@ class ActiveLearningSST2:
             padding="max_length",
             truncation=True,
             max_length=128,
-            return_tensors="np"
+            return_tensors="np",
         )
         # Handle missing segment_ids (token_type_ids)
         if "token_type_ids" not in tokenized:
@@ -197,7 +201,9 @@ class ActiveLearningSST2:
             loss = optax.softmax_cross_entropy(logits, labels).mean()
             return loss
 
-        indices = [self.enn.indexer(next(self.rng)) for _ in range(self.num_enn_samples)]
+        indices = [
+            self.enn.indexer(next(self.rng)) for _ in range(self.num_enn_samples)
+        ]
         loss_values = jax.vmap(single_index_loss)(jnp.array(indices))
         mean_loss = jnp.mean(loss_values)
         return mean_loss, state
@@ -225,7 +231,7 @@ class ActiveLearningSST2:
     def run(self):
         # Numbered comments are based on algorithm 1 of Fine tuning paper.
         # Pre-load all data into JAX-compatible arrays
-        train_labels = jnp.array(self.dataset['train']['label'])
+        train_labels = jnp.array(self.dataset["train"]["label"])
         num_samples = len(train_labels)
         all_indices = jnp.arange(num_samples)
 
@@ -238,7 +244,7 @@ class ActiveLearningSST2:
                 key=next(self.rng),
                 a=all_indices,
                 shape=(self.batch_size,),
-                replace=False
+                replace=False,
             )
 
             cand_indices_list = [int(i) for i in cand_indices]
@@ -246,28 +252,29 @@ class ActiveLearningSST2:
             print(f"DEBUG: sampled candidate indices")
             print(f"DEBUG: candidate indices: {cand_indices_list}")
             # Get batch directly using JAX array indexing
-            batch_sentences = [self.dataset['train'][i]['sentence'] for i in cand_indices_list]
+            batch_sentences = [
+                self.dataset["train"][i]["sentence"] for i in cand_indices_list
+            ]
             print(f"DEBUG: candidate batch_sentences: \n{batch_sentences}")
             cand_input_ids = self.tokenize(batch_sentences)
             print(f"DEBUG: cand_input_ids = \n{cand_input_ids}")
             print(f"DEBUG: Tokenization done")
 
             input = BertInput(
-                token_ids=cand_input_ids['input_ids'],
-                segment_ids=cand_input_ids['token_type_ids'],
-                input_mask=cand_input_ids['attention_mask'],
+                token_ids=cand_input_ids["input_ids"],
+                segment_ids=cand_input_ids["token_type_ids"],
+                input_mask=cand_input_ids["attention_mask"],
             )
 
             # Create ArrayBatch
-            cand_batch = datasets.ArrayBatch(
-                x=input, 
-                y=train_labels[cand_indices]
-            )
+            cand_batch = datasets.ArrayBatch(x=input, y=train_labels[cand_indices])
 
             print(f"DEBUG: Created ArrayBatch")
             print(f"\n\nDEBUG: candidate batch dimensions:")
             print(f"DEBUG: cand_batch.x = \n{cand_batch.x}")
-            print(f"DEBUG: cand_batch.x.token_ids.shape = \n{cand_batch.x.token_ids.shape}")
+            print(
+                f"DEBUG: cand_batch.x.token_ids.shape = \n{cand_batch.x.token_ids.shape}"
+            )
 
             # 3: select the learning_batch_size indices with highest priority
             batch_priorities, _ = self.priority_fn(
@@ -280,7 +287,7 @@ class ActiveLearningSST2:
             print(f"DEBUG: Got batch priorities")
 
             # Select top-k highest priority samples
-            top_k_indices = jnp.argsort(-batch_priorities)[:self.learning_batch_size]
+            top_k_indices = jnp.argsort(-batch_priorities)[: self.learning_batch_size]
             print(f"\n\nDEBUG: top_k_indices = \n{top_k_indices}")
             selected_input = BertInput(
                 token_ids=cand_input_ids["input_ids"][top_k_indices],
@@ -289,14 +296,12 @@ class ActiveLearningSST2:
             )
             selected_labels = train_labels[cand_indices][top_k_indices]
 
-            train_batch = datasets.ArrayBatch(
-                x=selected_input, 
-                y=selected_labels
-            )
+            train_batch = datasets.ArrayBatch(x=selected_input, y=selected_labels)
             loss = self.update(train_batch)
             losses.append(loss)
             print(f"Step {step}: Loss = {loss:.4f}")
             return losses
+
 
 def _clean_results(results: tp.Dict[str, tp.Any]) -> tp.Dict[str, tp.Any]:
     """Cleans the results for logging (can't log jax arrays)."""
