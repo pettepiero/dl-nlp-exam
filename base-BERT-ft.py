@@ -13,23 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ============================================================================
-"""Active learning evaluation of ENN agent on SST-2 by Piero"""
 import os
 import matplotlib.pyplot as plt
 import functools
-import typing as tp
+from typing import NamedTuple
 import joblib
 from tqdm import tqdm
 import requests
 from acme.utils import loggers
 import chex
-from enn import datasets
-from enn.networks import forwarders
-from enn.networks.bert.bert_classification_enn_v2 import (
-    create_enn_bert_for_classification_ft,
-    make_bert_base
-)
-from enn.networks.bert.base import BertInput, BertEnn
+#from enn import datasets
+#from enn.networks import forwarders
+#from enn.networks.bert.bert_classification_enn_v2 import (
+#    create_enn_bert_for_classification_ft,
+#    make_bert_base
+#)
+#from enn.networks.bert.base import BertInput, BertEnn
 import haiku as hk
 import numpy as np
 import jax
@@ -43,22 +42,13 @@ import optax
 from io import BytesIO
 from transformers import RobertaTokenizer, RobertaModel, BertTokenizer, BertModel
 from datasets import load_dataset
-
-from bert_enn import Embedding, TransformerBlock
-from enn.active_learning import priorities, prioritized
-from enn.networks.forwarders import make_batch_fwd
 from types import SimpleNamespace
-
+from enn.networks.bert.bert_v2 import BertConfigCustom, make_bert_base
 # Define the tokenizer from Huggingface
 huggingface_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 huggingface_roberta = BertModel.from_pretrained(
     "bert-base-uncased", output_hidden_states=True, return_dict=False
 )
-# huggingface_tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
-# huggingface_roberta = RobertaModel.from_pretrained(
-# "roberta-base", output_hidden_states=True, return_dict=False
-# )
-
 
 ########################################################################
 # Functions to load the pretrained weights
@@ -70,36 +60,26 @@ def postprocess_key(key):
         key.replace("model/featurizer/bert/", "").replace(":0", "").replace("self/", "")
     )
 
+class BertInput(NamedTuple):
+    token_ids: jnp.ndarray
+    segment_ids: jnp.ndarray
+    input_mask: jnp.ndarray
 
-# Cache the downloaded file to go easy on the tubes
-@functools.lru_cache()
-def get_pretrained_weights():
-    # We'll use the weight dictionary from the Roberta encoder at https://github.com/IndicoDataSolutions/finetune
-    remote_url = "https://bendropbox.s3.amazonaws.com/roberta/roberta-model-sm-v2.jl"
-    weights = joblib.load(BytesIO(requests.get(remote_url).content))
-
-    weights = {postprocess_key(key): value for key, value in weights.items()}
-
-    # We use huggingface's word embedding matrix because their token IDs mapping varies slightly from the
-    # format used in our joblib file above
-    weights["embeddings/word_embeddings"] = (
-        huggingface_roberta.get_input_embeddings().weight.detach().numpy()
-    )
-    return weights
+class ArrayBatch(NamedTuple):
+    x: BertInput
+    y: jnp.ndarray
 
 
-# Active Learning Experiment
-class ActiveLearningSST2:
+
+# BERT base fine tune on SST2 
+class BERTFineTuneSST2:
 
     def __init__(
         self,
-        network,
-        # model_fn,
-        priority_fn: str = "uniform",
+        bert,
         learning_rate=1e-5,
         batch_size=16,
         learning_batch_size: int = 4,
-        num_enn_samples: int = 5,
         num_steps: int = 100,
         seed=0,
     ):
@@ -109,14 +89,10 @@ class ActiveLearningSST2:
         self.batch_size = batch_size
         self.learning_batch_size = learning_batch_size
         self.rng = hk.PRNGSequence(seed)
-        # self.model_fn = hk.transform(model_fn)
-        self.num_enn_samples = num_enn_samples
         self.num_steps = num_steps
         self.replay = []
 
-        # Initialize ENN
-        self.network=network 
-        # dummy_input = jnp.ones([1, 512], dtype=jnp.int32)
+        self.bert=bert
 
         # Take a real sentence from the dataset
         example = self.dataset["train"][0]["sentence"]
@@ -134,21 +110,15 @@ class ActiveLearningSST2:
             tokenized["token_type_ids"] = np.zeros_like(tokenized["input_ids"])
 
         # Build BertInput
-        dummy_input = BertInput(
-            token_ids=tokenized["input_ids"],
-            segment_ids=tokenized["token_type_ids"],
-            input_mask=tokenized["attention_mask"],
-        )
+#        dummy_input = BertInput(
+#            token_ids=tokenized["input_ids"],
+#            segment_ids=tokenized["token_type_ids"],
+#            input_mask=tokenized["attention_mask"],
+#        )
 
-#        print("DEBUG: calling self.network.init(...)")
-        if type(self.network) == BertEnn:
-            self.params, self.state = self.network.init(
-                next(self.rng), dummy_input, self.network.indexer(next(self.rng))
-            )
-        else:
-            self.params, self.state = self.network.init(
-                next(self.rng), dummy_input 
-            )
+        self.params, self.state = self.network.init(
+            next(self.rng), dummy_input 
+         )
             
         self.trainable_params, self.non_trainable_params = hk.data_structures.partition(
             lambda m, n, p: m=='BERT/classifier_head', self.params
@@ -429,56 +399,13 @@ def tokenize_input(
         input_mask=encoding["attention_mask"],
     )
 
-def print_tree(d, depth, print_value=False):
-    for k in d.keys():
-        if isinstance(d[k], dict):
-            print('  ' * depth, k)
-            print_tree(d[k], depth + 1, print_value)
-        else:
-            if print_value:
-                print('  ' * depth, k, d[k])
-            else:
-                print('  ' * depth, k)
-
-
 if __name__ == "__main__":
-    print("Creating base model first....")
+    print("Creating base model....")
     base_model = make_bert_base()
     print("..done")
 
-    print("Fine tuning base model...") 
-    experiment = ActiveLearningSST2(
-        network=base_model
-    )
-    losses = experiment.fine_tune_base()
-    print("...done")
-    plot_loss_curve(losses, 'BERT-base')
-    save_loss_to_file(losses, 'BERT-base')
-    print("Creating ENN BERT for classification...")
-
-    enn_model, haiku_params, haiku_state = create_enn_bert_for_classification_ft()
+    def model_fn(inputs: BertInput, is_training: bool):
+        cls_output = bert_forward(inputs.token_ids, inputs.segment_ids, inputs.input_mask)
     
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-
-    print("... done")
-
-    priorities_to_test = [
-        "uniform",
-        "entropy",
-        "margin",
-        "bald",
-        "variance",
-    ]
-
-
-#    for priority in priorities_to_test:
-#        print(f"Running for {priority} priority function...")
-#        experiment = ActiveLearningSST2(
-#            network=enn_model,
-#            priority_fn=priority,
-#        )
-#        losses = experiment.run()
-#        plot_loss_curve(losses, priority)
-#        save_loss_to_file(losses, priority)
-#        print("...done")
+        return classifier_head(cls_output, is_training)
 
