@@ -16,12 +16,13 @@
 import os
 import matplotlib.pyplot as plt
 import functools
-from typing import NamedTuple
+from typing import NamedTuple, Optional
 import joblib
 from tqdm import tqdm
 import requests
 from acme.utils import loggers
 import chex
+import pandas as pd
 #from enn import datasets
 #from enn.networks import forwarders
 #from enn.networks.bert.bert_classification_enn_v2 import (
@@ -69,272 +70,308 @@ class ArrayBatch(NamedTuple):
     x: BertInput
     y: jnp.ndarray
 
+#def update_step(params, frozen_params, opt_state, batch, rng_key, apply_fn, loss_fn, optimizer):
+def update_step(params, frozen_params, opt_state, batch, rng_key, apply_fn, optimizer):
+    # Combine frozen BERT with trainable classifier
+    combined_params = hk.data_structures.merge(frozen_params, params)
+    
+    def loss_fn_inner(trainable_params):
+        combined = hk.data_structures.merge(frozen_params, trainable_params)
+        #logits, _ = apply_fn(combined, rng_key, batch.x)
+        output = apply_fn(combined, rng_key, batch.x)
+        logits = output.extra['classification_logits']
+
+        #probs = jax.nn.softmax(logits, axis=-1)
+        #preds = jnp.argmax(probs, axis=-1)
+        
+       # labels = jax.nn.one_hot(batch.y, 2)
+       # labels = labels.astype(jnp.int32)
+        labels = batch.y.astype(jnp.int32)
+        #return optax.softmax_cross_entropy(logits, labels).mean()
+        return optax.softmax_cross_entropy_with_integer_labels(logits, labels).mean()
+    
+    grads = jax.grad(loss_fn_inner)(params)
+    updates, new_opt_state = optimizer.update(grads, opt_state)
+    new_params = optax.apply_updates(params, updates)
+    loss = loss_fn_inner(new_params)
+    return new_params, new_opt_state, loss
+
+#update_step = jax.jit(update_step, static_argnames=["apply_fn", "loss_fn", "optimizer"])
+update_step = jax.jit(update_step, static_argnames=["apply_fn", "optimizer"])
+
+
+# DEBUG
+def test_on_logits(tokenize_fn, apply_fn, params, rng):
+    # Example text
+    sentence = "I love this movie!"
+    
+    # Tokenize using HuggingFace
+    tok = tokenize_fn(sentence)
+
+    input = BertInput(
+        token_ids=jnp.array(tok["input_ids"]),
+        segment_ids=jnp.array(tok["token_type_ids"]),
+        input_mask=jnp.array(tok["attention_mask"]),
+    )
+    label = 1 
+
+    batch = ArrayBatch(x=input, y=label)
+    #self.trainable_params, self.opt_state, loss = self.update(
+    #    self.trainable_params, self.opt_state, batch
+    #)
+    print(f"DEBUG: batch.x.token_ids.shape = {batch.x.token_ids.shape}")    
+
+    # Forward pass
+    output = apply_fn(params, rng, batch.x)
+    logits = output.extra['classification_logits']
+    probs = jax.nn.softmax(logits, axis=-1)
+    preds = jnp.argmax(probs, axis=-1)
+ 
+    print("DEBUG: test_on_logits")    
+    print("Logits:", logits)
+    print("Shape:", logits.shape)  # Should be (1, num_classes), e.g., (1, 2) for SST-2
+    print("probs:", probs)
+    print("preds:", preds)
+
+
+    print("############################################\n\n")
 
 
 # BERT base fine tune on SST2 
 class BERTFineTuneSST2:
-
     def __init__(
         self,
-        bert,
-        learning_rate=1e-5,
-        batch_size=16,
-        learning_batch_size: int = 4,
-        num_steps: int = 100,
-        seed=0,
+        model,
+        dataset,
+        tokenizer,
+        rng,
+        batch_size,
+        criterion: str,
+        num_steps: Optional[int],
+        learning_rate
     ):
-        self.tokenizer = huggingface_tokenizer
-        self.dataset = load_dataset("nyu-mll/glue", "sst2")
-        self.learning_rate = learning_rate
+        self.model = model 
+        self.dataset = dataset
+        self.tokenizer = tokenizer
+        self.rng = hk.PRNGSequence(rng)
         self.batch_size = batch_size
-        self.learning_batch_size = learning_batch_size
-        self.rng = hk.PRNGSequence(seed)
         self.num_steps = num_steps
-        self.replay = []
 
-        self.bert=bert
+        if criterion == 'num_steps':
+            if num_steps is None:
+                print("Error, selected num_steps criterion but"
+                      " did not provide num_steps")
+                exit()
+        elif criterion == 'num_epochs':
+            if num_epochs is None:
+                print("Error, selected num_epochs criterion but"
+                      " did not provide num_epochs")
+                exit()
+        else:
+            print("Error in criterion")
+            exit()
 
-        # Take a real sentence from the dataset
-        example = self.dataset["train"][0]["sentence"]
-
-        # Tokenize with huggingface tokenizer
-        tokenized = self.tokenizer(
-            example,
-            padding="max_length",
-            truncation=True,
-            max_length=128,
-            return_tensors="np",
+        # Init model
+        dummy_input = BertInput(
+            token_ids=jnp.zeros((1, 128), dtype=jnp.int32),
+            segment_ids=jnp.zeros((1, 128), dtype=jnp.int32),
+            input_mask=jnp.ones((1, 128), dtype=jnp.int32)
         )
-        # Handle missing segment_ids (token_type_ids)
-        if "token_type_ids" not in tokenized:
-            tokenized["token_type_ids"] = np.zeros_like(tokenized["input_ids"])
+        #self.params, _ = model.init(next(self.rng), dummy_input)
+        self.params = self.model.init(next(self.rng), dummy_input)
+        self.params = hk.data_structures.to_immutable_dict(self.params)
+        self.labels = jnp.array([ex['label'] for ex in self.dataset])
 
-        # Build BertInput
-#        dummy_input = BertInput(
-#            token_ids=tokenized["input_ids"],
-#            segment_ids=tokenized["token_type_ids"],
-#            input_mask=tokenized["attention_mask"],
-#        )
-
-        self.params, self.state = self.network.init(
-            next(self.rng), dummy_input 
-         )
-            
-        self.trainable_params, self.non_trainable_params = hk.data_structures.partition(
-            lambda m, n, p: m=='BERT/classifier_head', self.params
-        )
-
-#        print("DEBUG: --")
-        self.opt_state = optax.adam(learning_rate).init(self.params)
-        entropy_priority_ctor = priorities.get_priority_fn_ctor(priority_fn)
-
-#        print(f"DEBUG: created priority function constructor")
-
-        # Prepare ENN forwarder and priority function
-        self.network_batch_fwd = forwarders.make_batch_fwd(
-            self.network, num_enn_samples=self.num_enn_samples
-        )
-
-#        print(f"DEBUG: prepared ENN forwarder")
-
-        self.priority_fn = entropy_priority_ctor(self.network_batch_fwd)
-
-#        print(f"DEBUG: Finished ActiveLearningSST2.__init__()")
-        def make_mask(params):
-            """ Created to freeze BERT base parameters and train only
-                the classification head """
-            def mask_fn(path, _):
-                return path[0] == 'BERT/classifier_head'
+        def print_tree(params, prefix=""):
+            for k, v in params.items():
+                if isinstance(v, dict):
+                    print_tree(v, prefix + k + "/")
+                else:
+                    print(prefix + k)
         
-            return jax.tree_util.tree_map_with_path(mask_fn, params)
-        self.mask = make_mask(self.params)
-        self.tx = optax.masked(optax.adam(self.learning_rate), self.mask)
-        self.opt_state = self.tx.init(self.params)
+       # print_tree(self.params)
 
+#        def is_trainable(module_name, name, value):
+#            return (
+#                "classifier_head" in module_name
+#                or "pooler_dense" in module_name
+#            )
+        def is_trainable(module_name, name, value):
+            return True
+           # return (
+           #     "classifier_head" in module_name
+           #     or "pooler_dense" in module_name
+           #     or "attention_output_11" in module_name
+           #     or "intermediate_output_11" in module_name
+           #     or "query_11" in module_name
+           #     or "values_11" in module_name
+           #     or "layer_output_11" in module_name
+           #     or "attention_output_10" in module_name
+           #     or "intermediate_output_10" in module_name
+           #     or "query_10" in module_name
+           #     or "values_10" in module_name
+           #     or "layer_output_10" in module_name
+           # )
+       # self.trainable_params = hk.data_structures.filter(
+       #     lambda m, n, p: 'classifier_head' in m, self.params
+       # )
+       # self.frozen_params = hk.data_structures.filter(
+       #     lambda m, n, p: "classifier_head" not in m, self.params
+       # )        
+        
+        self.frozen_params, self.trainable_params = hk.data_structures.partition(
+            lambda mod, name, val: not is_trainable(mod, name, val),
+            self.params
+        )
+
+        print("Trainable params:")
+        for k in self.trainable_params.keys():
+            print(k)
+        
+        print("\nFrozen params:")
+        for k in self.frozen_params.keys():
+            print(k)
+
+        self.opt = optax.adam(learning_rate)
+        self.opt_state = self.opt.init(self.trainable_params)
+
+        print(f"DEBUG: params before learning: \n{self.trainable_params['BERT/classifier_head']['w']}")
 
     def tokenize(self, texts):
         tokens = self.tokenizer(
             texts,
             padding="max_length",
-            max_length=128,
+            max_length=512,
             truncation=True,
             return_tensors="np",
         )
-        # Handle missing segment_ids (token_type_ids)
-        if "token_type_ids" not in tokens:
-            tokens["token_type_ids"] = np.zeros_like(tokens["input_ids"])
-
         return tokens
 
-    def loss_fn(self, trainable_params, non_trainable_params, state, batch):
-        params = hk.data_structures.merge(trainable_params, non_trainable_params)
-
-        # Averages the loss over epistemic indices
-        def single_index_loss(index):
-            net_out, new_state = self.network.apply(params, state, batch["x"], index)
-            logits = net_out.train
-            labels = jax.nn.one_hot(batch["y"], 2)
-#            print(f"DEBUG: in loss_fn: logits.shape = {logits.shape}")
-#            print(f"DEBUG: in loss_fn: labels.shape = {labels.shape}")
-            loss = optax.softmax_cross_entropy(logits, labels).mean()
-            return loss
-
-        indices = [
-            self.network.indexer(next(self.rng)) for _ in range(self.num_enn_samples)
-        ]
-        loss_values = jax.vmap(single_index_loss)(jnp.array(indices))
-        mean_loss = jnp.mean(loss_values)
-        return mean_loss, state
+    #def loss_fn(self, params, batch: ArrayBatch):
+    #    
+#   #     logits, _ = self.model.apply(
+    #    logits = self.model.apply(
+    #        {**self.params, **params}, # combine frozen + trainable params
+    #        next(self.rng),
+    #        batch.x,
+    #        is_training=True,
+    #    )
+    #    #labels = jax.nn.one_hot(batch.y, 2)
+    #    labels = batch.y.astype(jnp.int32)
+    #    return optax.softmax_cross_entropy_with_integer_labels(logits, labels).mean()
 
 
-    def update(self, batch):
-        # 5: compute minibatch gradient only for trainable_params
-        
-        grad_fn = jax.value_and_grad(self.loss_fn, has_aux=True)
-        (loss, state), grads = grad_fn(self.params, self.non_trainable_params, self.state, batch)
-        updates, self.opt_state = self.tx.update(grads, self.opt_state, self.params)
-        self.params = optax.apply_updates(self.params, updates)
-        #updates, self.opt_state = optax.adam(self.learning_rate).update(
-        #    grads, self.opt_state
-        #    grads, self.opt_state, self.trainable_params
-        #)
-        # 6: update only trainable parameters
-        #self.trainable_params = optax.apply_updates(self.trainable_params, updates)
-        self.state = state
-        return loss
+#    @jax.jit
+#    def update(self, params, opt_state, batch):
+#        grads = jax.grad(self.loss_fn)(params, batch)
+#        updates, new_opt_state = self.opt.update(grads, opt_state)
+#        new_params = optax.applu_updates(params, updates)
+#        loss = self.loss_fn(new_params, batch)
+#    
+#        return new_params, new_opt_state, loss
+#    def get_accuracy(self, rng):
+#        n_samples = 50
+#        test_labels = jnp.array(self.dataset['test'][:n_samples]['label']
+#        indices = jnp.arange(n_samples)
+#        test_sentences = self.dataset['test'][:n_samples]['sentence']
+#        tok = self.tokenize(batch_sentences)
+#        input = BertInput(
+#            token_ids=jnp.array(tok['input_ids']),
+#            segment_ids=jnp.array(tok['token_type_ids']),
+#            input_mask=jnp.array(tok['attention_mask']),
+#        )
+#        batch = ArrayBatch(x=input, y=batch_labels)
+#
+#        predictions = self.model.apply(
+#            params, rng, 
 
-    def select_uncertain_samples(self, pool, num_samples=10):
-        input_ids, _ = self.tokenize(pool["sentence"])
-        batch = datasets.ArrayBatch(x=input_ids, y=np.array(pool["label"]))
-        scores, _ = self.priority_fn(self.params, self.state, batch, next(self.rng))
-        selected_indices = jnp.argsort(scores)[-num_samples:]
-        return [pool[i] for i in selected_indices]
-
-    def fine_tune_base(self):
-        """ Fine tune the base BERT model for SST-2 classification without epinet
-            and without active learning."""
-        
-        train_labels = jnp.array(self.dataset['train']['label'])
-        num_samples = len(train_labels)
-        all_indices = jnp.arange(num_samples)
-        losses = []
-
-        for step in tqdm(range(self.num_steps)):
-            batch_indices = jax.random.choice(
-                key=next(self.rng),
-                a=all_indices,
-                shape=(self.batch_size,),
-                replace=False
-            )
-            
-            batch_sentences = [self.dataset['train'][int(i)]['sentence'] for i in batch_indices]
-            batch_input = self.tokenize(batch_sentences)
-            
-            input = BertInput(
-                token_ids=batch_input['input_ids'],
-                segment_ids=batch_input['token_type_ids'],
-                input_mask=batch_input['attention_mask'],
-            )
-            batch_labels = train_labels[batch_indices]
-            train_batch = datasets.ArrayBatch(x=input, y=batch_labels)
-            
-            loss = self.update(train_batch)
-            losses.append(loss)
-
-        return losses        
+    def compute_accuracy(self, logits: jnp.ndarray, labels: jnp.ndarray) -> float:
+        predictions = jnp.argmax(logits, axis=-1)
+        return jnp.mean(predictions == labels)
 
     def run(self):
-        # Numbered comments are based on algorithm 1 of Fine tuning paper.
-        # Pre-load all data into JAX-compatible arrays
-        train_labels = jnp.array(self.dataset["train"]["label"])
-        num_samples = len(train_labels)
-        all_indices = jnp.arange(num_samples)
-
-#        print(f"DEBUG: setup of loop done")
-        losses = []
-
-        for step in tqdm(range(self.num_steps)):
-            # 2: Sample batch_size candidate indices without replacement
-            cand_indices = jax.random.choice(
-                key=next(self.rng),
-                a=all_indices,
-                shape=(self.batch_size,),
-                replace=False,
-            )
-
-            cand_indices_list = [int(i) for i in cand_indices]
-
-#            print(f"DEBUG: sampled candidate indices")
-#            print(f"DEBUG: candidate indices: {cand_indices_list}")
-            # Get batch directly using JAX array indexing
-            batch_sentences = [
-                self.dataset["train"][i]["sentence"] for i in cand_indices_list
-            ]
-#            print(f"DEBUG: candidate batch_sentences: \n{batch_sentences}")
-            cand_input_ids = self.tokenize(batch_sentences)
-#            print(f"DEBUG: cand_input_ids = \n{cand_input_ids}")
-#            print(f"DEBUG: Tokenization done")
-
-            input = BertInput(
-                token_ids=cand_input_ids["input_ids"],
-                segment_ids=cand_input_ids["token_type_ids"],
-                input_mask=cand_input_ids["attention_mask"],
-            )
-
-            # Create ArrayBatch
-            cand_batch = datasets.ArrayBatch(x=input, y=train_labels[cand_indices])
-
-#            print(f"DEBUG: Created ArrayBatch")
-#            print(f"\n\nDEBUG: candidate batch dimensions:")
-#            print(f"DEBUG: cand_batch.x = \n{cand_batch.x}")
-            print(
-#                f"DEBUG: cand_batch.x.token_ids.shape = \n{cand_batch.x.token_ids.shape}"
-            )
-
-            # 3: select the learning_batch_size indices with highest priority
-            batch_priorities, _ = self.priority_fn(
-                self.params,
-                self.state,
-                cand_batch,
-                next(self.rng),
-            )
-
-#            print(f"DEBUG: Got batch priorities")
-
-            # Select top-k highest priority samples
-            top_k_indices = jnp.argsort(-batch_priorities)[: self.learning_batch_size]
-#            print(f"\n\nDEBUG: top_k_indices = \n{top_k_indices}")
-            selected_input = BertInput(
-                token_ids=cand_input_ids["input_ids"][top_k_indices],
-                segment_ids=cand_input_ids["token_type_ids"][top_k_indices],
-                input_mask=cand_input_ids["attention_mask"][top_k_indices],
-            )
-            selected_labels = train_labels[cand_indices][top_k_indices]
-
-            train_batch = datasets.ArrayBatch(x=selected_input, y=selected_labels)
-            loss = self.update(train_batch)
-            losses.append(loss)
-            #print(f"Step {step}: Loss = {loss:.4f}")
+        train_labels = jnp.array([item['label'] for item in self.dataset])
+        all_indices = jnp.arange(len(train_labels))
         
-        return losses
+        losses = []
+        accuracies = []
+    
+        for step in tqdm(range(self.num_steps)):
+        #    batch_indices = jax.random.choice(
+        #        key=next(self.rng),
+        #        a=all_indices,
+        #        shape=(self.batch_size,),
+        #        replace=True,
+        #    )
+        #    
+        #    batch_sentences = [
+        #        self.dataset["train"][int(i)]["sentence"] for i in batch_indices 
+        #    ]
+        #    tokens = self.tokenize(batch_sentences)
+        #    token_ids = jnp.array(tokens["input_ids"])
+        #    segment_ids = jnp.array(tokens["token_type_ids"])
+        #    input_mask = jnp.array(tokens["attention_mask"])
+
+        #    if token_ids.ndim == 1:
+        #        token_ids = token_ids[None, :]
+        #    if segment_ids.ndim == 1:
+        #        segment_ids = segment_ids[None, :]
+        #    if input_mask.ndim == 1:
+        #        input_mask = input_mask[None, :]
+
+        #    input = BertInput(
+        #        token_ids=token_ids,
+        #        segment_ids=segment_ids,
+        #        input_mask=input_mask,
+        #    )
+        #    batch_labels = train_labels[batch_indices]
+        #    batch = ArrayBatch(x=input, y=batch_labels)
+
+            ############################################
+            batch_indices = jax.random.choice(
+            key=next(self.rng),
+            a=jnp.arange(len(self.dataset)),
+            shape=(self.batch_size,),
+            replace=True,
+        )
+            batch_input_ids = jnp.stack([jnp.array(self.dataset[int(i)]['input_ids']) for i in batch_indices])
+            batch_token_type_ids = jnp.stack([jnp.array(self.dataset[int(i)]['token_type_ids']) for i in batch_indices])
+            batch_attention_mask = jnp.stack([jnp.array(self.dataset[int(i)]['attention_mask']) for i in batch_indices])
+ 
+#            batch_labels = jnp.array([self.dataset[int(i)]['label'] for i in batch_indices])
+            batch_labels = self.labels[batch_indices]
+        
+            input = BertInput(
+                token_ids=batch_input_ids,
+                segment_ids=batch_token_type_ids,
+                input_mask=batch_attention_mask,
+            )
+            batch = ArrayBatch(x=input, y=batch_labels)
+
+            ##############################################
+            self.trainable_params, self.opt_state, loss = update_step(
+                self.trainable_params,
+                frozen_params=self.frozen_params,
+                opt_state=self.opt_state,
+                batch=batch,
+                rng_key=next(self.rng),
+                apply_fn=base_model.apply,
+                optimizer=self.opt
+            )
+    
+            # Compute accuracy
+            combined_params = hk.data_structures.merge(self.frozen_params, self.trainable_params)
+            output = base_model.apply(combined_params, next(self.rng), batch.x)
+            logits = output.extra['classification_logits']
+            acc = float(self.compute_accuracy(logits, batch.y))
+    
+            losses.append(float(loss))
+            accuracies.append(acc)
+    
+        return losses, accuracies
 
 
-def _clean_results(results: tp.Dict[str, tp.Any]) -> tp.Dict[str, tp.Any]:
-    """Cleans the results for logging (can't log jax arrays)."""
-
-    def clean_result(value: tp.Any) -> tp.Any:
-        value = loggers.to_numpy(value)
-        if isinstance(value, chex.ArrayNumpy) and value.size == 1:
-            value = float(value)
-        return value
-
-    for key, value in results.items():
-        results[key] = clean_result(value)
-
-    return results
-
-
-def plot_loss_curve(losses: list, save_path: str):
+def plot_loss_curve(file: str, save_path: str):
     """
     Plot the losses and save to image
     """
@@ -348,18 +385,59 @@ def plot_loss_curve(losses: list, save_path: str):
             "one of the available priority functions"
         )
         return
+    df = pd.read_csv(file)
     plt.figure(figsize=(8, 5))
-    plt.plot(losses, label="Training Loss", color="blue")
-    plt.xlabel("Training Step")
+    plt.xlabel("Step")
     plt.ylabel("Loss")
+    df.mean(axis=1).plot(title=title)
+#    plt.title(title)
+#    plt.grid(True)
+#    plt.tight_layout()
+    plt.savefig(save_path)
+#    plt.show()
+#    plt.close()
+    print(f"✅ Loss curve saved to {save_path}")
+
+
+
+def plot_loss_and_accuracy_curve(file: str, save_path: str):
+    """
+    Plot the training loss and accuracy curves from a CSV file.
+    """
+    available_priorities = ["BERT-base", "uniform", "entropy", "margin", "bald", "variance"]
+    matched_priority = next((p for p in available_priorities if p in save_path), None)
+    
+    if matched_priority:
+        title = f"Training Metrics over Steps using {matched_priority}"
+    else:
+        print(
+            "Error in plot_loss_and_accuracy_curve: save_path must contain "
+            "one of the available priority functions"
+        )
+        return
+
+    df = pd.read_csv(file)
+
+    if not {"loss", "accuracy"}.issubset(df.columns):
+        print("Error: CSV file must contain 'loss' and 'accuracy' columns.")
+        return
+
+    plt.figure(figsize=(10, 6))
+    
+    # Plot loss
+    plt.plot(df["loss"], label="Loss")
+    
+    # Plot accuracy
+    plt.plot(df["accuracy"], label="Accuracy")
+    
+    plt.xlabel("Step")
+    plt.ylabel("Metric Value")
     plt.title(title)
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(save_path)
-    plt.close()
-    print(f"✅ Loss curve saved to {save_path}")
-
+    print(f"✅ Loss and accuracy curve saved to {save_path}")
 
 def save_loss_to_file(losses: list, save_path: str):
     """
@@ -381,7 +459,7 @@ def save_loss_to_file(losses: list, save_path: str):
 
 
 def tokenize_input(
-    text: str, tokenizer: BertTokenizer, max_length: int = 512
+    text: str, tokenizer: BertTokenizer, max_length: int = 128 
 ) -> BertInput:
     """Tokenizes input text and converts it into BertInput format."""
     encoding = tokenizer(
@@ -399,13 +477,84 @@ def tokenize_input(
         input_mask=encoding["attention_mask"],
     )
 
+
+def preprocess_dataset(dataset, tokenizer, max_length=128):
+    def tokenize(example):
+        encoding = tokenizer(
+            example['sentence'],
+            padding='max_length',
+            truncation=True,
+            max_length=max_length,
+            return_tensors='np'
+        )
+        return {
+            'input_ids': encoding['input_ids'][0],
+            'token_type_ids': encoding['token_type_ids'][0],
+            'attention_mask': encoding['attention_mask'][0],
+            'label': example['label']
+        }
+
+    return dataset.map(tokenize)
+
 if __name__ == "__main__":
+    print("\n\nFine tuning of BERT base model for SST2 classification\n\n")
     print("Creating base model....")
     base_model = make_bert_base()
     print("..done")
-
-    def model_fn(inputs: BertInput, is_training: bool):
-        cls_output = bert_forward(inputs.token_ids, inputs.segment_ids, inputs.input_mask)
+   
+    print("Loading SST2 dataset...")
+    dataset = load_dataset(
+        "nyu-mll/glue", 
+        "sst2",
+    )
+    print("...done") 
+    print(dataset)
+ 
+    print("Loading Hugginface's tokenizer 🤗...")
+    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    print("...done")
     
-        return classifier_head(cls_output, is_training)
+    print("Pretokenizing the dataset...")
+    dataset = dataset.map(lambda x: {'sentence': x['sentence'], 'label': x['label']})
+    dataset = preprocess_dataset(dataset['train'], tokenizer)
+    print("...done")
 
+    SEED = 0
+    rng = hk.PRNGSequence(SEED)
+
+    config = {
+        'batch_size': 32,
+        'num_steps': 1000,
+#        'num_steps': 300,
+        'epochs': 1,
+        'learning_rate': 3e-5,
+        'seed': rng
+    }
+    
+     
+    print("Creating experiment...")
+    experiment = BERTFineTuneSST2(
+        model=base_model,
+        dataset = dataset,
+        tokenizer = tokenizer,
+        rng = next(config['seed']),
+        batch_size = config['batch_size'],
+        criterion = 'num_steps',
+        num_steps = config['num_steps'],
+        learning_rate = config['learning_rate']
+    )
+    print("...done")
+    
+    all_losses = []
+    print("Running experiment...")
+    # Test on one run only
+    losses, acc = experiment.run()
+    df = pd.DataFrame({
+        "loss": losses,
+        "accuracy": acc
+    })
+    df.to_csv("single_losses_test.csv", index_label="step")
+   
+    plot_loss_and_accuracy_curve("single_losses_test.csv", 'BERT-base')
+    save_loss_to_file(losses, 'BERT-base')
+    print(f"DEBUG: params after learning: \n{experiment.trainable_params['BERT/classifier_head']['w']}")
