@@ -446,20 +446,11 @@ if __name__ == "__main__":
     base_model = make_bert_base()
     print("..done")
 
-    print("Fine tuning base model...") 
-    experiment = ActiveLearningSST2(
-        network=base_model
-    )
-    losses = experiment.fine_tune_base()
-    print("...done")
-    plot_loss_curve(losses, 'BERT-base')
-    save_loss_to_file(losses, 'BERT-base')
     print("Creating ENN BERT for classification...")
-
     enn_model, haiku_params, haiku_state = create_enn_bert_for_classification_ft()
-    
+    print("... done")
+    print("Loading tokenizer...")
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-
     print("... done")
 
     priorities_to_test = [
@@ -469,6 +460,18 @@ if __name__ == "__main__":
         "bald",
         "variance",
     ]
+
+    # Test on a single priority first
+    print(f"Running entropy priority experiment...")
+    experiment = ActiveLearningSST2(
+        network=enn_model,
+        priority_fn='entropy',
+    )
+    losses = experiment.run()
+    plot_loss_curve(losses, priority)
+    save_loss_to_file(losses, priority)
+    print("... done")
+    
 
 
 #    for priority in priorities_to_test:

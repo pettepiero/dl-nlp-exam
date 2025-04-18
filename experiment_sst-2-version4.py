@@ -69,7 +69,7 @@ update_step = jax.jit(update_step, static_argnames=["apply_fn", "optimizer"])
 
 
 # BERT base fine tune on SST2 
-class BERTFineTuneSST2:
+class BERTENNFineTuneSST2:
     def __init__(
         self,
         model,

@@ -25,7 +25,7 @@ from acme.utils import loggers
 import chex
 from enn import datasets
 from enn.networks import forwarders
-from enn.networks.bert.bert_classification_enn import (
+from enn.networks.bert.bert_classification_enn_v2 import (
     create_enn_bert_for_classification_ft,
 )
 from enn.networks.bert.base import BertInput, BertEnn
@@ -50,17 +50,13 @@ from types import SimpleNamespace
 
 # Define the tokenizer from Huggingface
 huggingface_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-huggingface_roberta = BertModel.from_pretrained(
+huggingface_bert = BertModel.from_pretrained(
     "bert-base-uncased", output_hidden_states=True, return_dict=False
 )
-# huggingface_tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
-# huggingface_roberta = RobertaModel.from_pretrained(
-# "roberta-base", output_hidden_states=True, return_dict=False
-# )
 
 ########################################################################
 # Define the transformer model
-class RobertaFeaturizer(hk.Module):
+class BertFeaturizer(hk.Module):
     def __init__(self, config, *args, **kwargs):
         super().__init__(name="Transformer")
         self.config = config
@@ -95,7 +91,7 @@ def get_pretrained_weights():
     # We use huggingface's word embedding matrix because their token IDs mapping varies slightly from the
     # format used in our joblib file above
     weights["embeddings/word_embeddings"] = (
-        huggingface_roberta.get_input_embeddings().weight.detach().numpy()
+        huggingface_bert.get_input_embeddings().weight.detach().numpy()
     )
     return weights
 

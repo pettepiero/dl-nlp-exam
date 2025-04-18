@@ -9,3 +9,5 @@ media/texts
 media/videos/
 manim-stuff/enns/media
 manim-stuff/enns/enns_assets/
+*.csv
+logs/

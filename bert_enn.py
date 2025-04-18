@@ -1,7 +1,16 @@
 import haiku as hk
 import jax.numpy as jnp
 import jax
+from typing import NamedTuple
 
+class BertInput(NamedTuple):
+    token_ids: jnp.ndarray
+    segment_ids: jnp.ndarray
+    input_mask: jnp.ndarray
+
+class ArrayBatch(NamedTuple):
+    x: BertInput
+    y: jnp.ndarray
 
 class Scope(object):
     """
