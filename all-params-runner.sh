@@ -10,4 +10,4 @@
 module load cuda/11.8  # or whatever your cluster needs
 source activate gpu_bert_ft # conda environment with JAX
 
-python base-BERT-ft.py --train_all
+python base-BERT-ft.py --train_all --suffix "$SLURM_JOB_ID" --save_params --save_params_path "outputs/job_$SLURM_JOB_ID/params_$SLURM_JOB_ID.npz" --learning_rate 1e-4

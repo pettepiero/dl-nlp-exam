@@ -12,4 +12,4 @@ source activate gpu_bert_ft # conda environment with JAX
 
 echo "Running experiment with SLURM job ID: $SLURM_JOB_ID"
 
-python base-BERT-ft.py --suffix "$SLURM_JOB_ID" --save_params --save_params_path "outputs/job_$SLURM_JOB_ID/params_$SLURM_JOB_ID.npz" --learning_rate 1e-4
+python experiment_sst-2-version5.py --train_all --suffix "$SLURM_JOB_ID" --save_params --save_params_path "outputs/job_$SLURM_JOB_ID/all-params_$SLURM_JOB_ID.npz" --load_params --load_params_path "outputs/job_11261/all-params_11261.npz"
