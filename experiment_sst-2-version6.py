@@ -14,6 +14,8 @@
 # limitations under the License.
 # ============================================================================
 import os
+import json
+import time
 import matplotlib.pyplot as plt
 import argparse
 from typing import NamedTuple, Optional
@@ -24,7 +26,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 from jax.random import PRNGKey
-
+import jax.profiler
 import optax
 from datasets import load_dataset
 from enn.networks.bert.bert_v2 import BertConfigCustom, make_bert_enn
@@ -36,7 +38,8 @@ from huggingface_haiku_loader import (
 from plots_and_files import plot_loss_curve, plot_loss_and_accuracy_curve, save_results_to_file, plot_all_runs_with_mean
 from bert_processing import postprocess_key, tokenize_input, preprocess_dataset
 from bert_enn import BertInput, ArrayBatch
-########################################################################
+from enn.active_learning import priorities 
+from enn.networks import forwarders
 
 # Some light postprocessing to make the parameter keys a bit more concise
 
@@ -84,6 +87,7 @@ class BERTENNFineTuneSST2:
         self,
         model,
         dataset,
+        val_dataset,
         tokenizer,
         rng,
         batch_size,
@@ -91,16 +95,26 @@ class BERTENNFineTuneSST2:
         num_steps: Optional[int],
         learning_rate,
         train_all: bool = False,
-        pretrained_params=None
+        pretrained_params=None,
+        priority_criterion: str='uniform',
+        priority_fn_enn_samples: int=10,
+        batch_gradient_enn_samples: int=10,
+        NB: int = 40,
+        nb: int = 4,
     ):
         self.model = model 
         self.dataset = dataset
+        self.val_dataset = val_dataset
         self.tokenizer = tokenizer
         self.rng = hk.PRNGSequence(rng)
         self.batch_size = batch_size
         self.num_steps = num_steps
         self.train_all = train_all
         self.indexer = model.indexer
+        self.priority_fn_enn_samples = priority_fn_enn_samples
+        self.batch_gradient_enn_samples = batch_gradient_enn_samples
+        self.NB = NB
+        self.nb = nb
 
         if criterion == 'num_steps':
             if num_steps is None:
@@ -130,6 +144,17 @@ class BERTENNFineTuneSST2:
         self.params = hk.data_structures.to_immutable_dict(self.params)
         self.labels = jnp.array([ex['label'] for ex in self.dataset])
 
+        # preprocessing of the dataset
+        self.input_ids = jnp.stack([jnp.array(ex["input_ids"]) for ex in self.dataset])
+        self.token_type_ids = jnp.stack([jnp.array(ex["token_type_ids"]) for ex in self.dataset])
+        self.attention_masks = jnp.stack([jnp.array(ex["attention_mask"]) for ex in self.dataset])
+
+        self.val_input_ids = jnp.stack([jnp.array(ex["input_ids"]) for ex in self.val_dataset])
+        self.val_token_type_ids = jnp.stack([jnp.array(ex["token_type_ids"]) for ex in self.val_dataset])
+        self.val_attention_masks = jnp.stack([jnp.array(ex["attention_mask"]) for ex in self.val_dataset])
+
+
+
         def print_tree(params, prefix=""):
             for k, v in params.items():
                 if isinstance(v, dict):
@@ -158,6 +183,11 @@ class BERTENNFineTuneSST2:
                 or "train_epinet" in module_name
             )
         
+        if self.train_all:
+            print("\n\nTraining all parameters of model\n")
+        else:
+            print("\n\nTraining subset of parameters of the model\n")
+
         self.frozen_params, self.trainable_params = hk.data_structures.partition(
             lambda mod, name, val: not is_trainable(mod, name, val),
             self.params
@@ -171,7 +201,21 @@ class BERTENNFineTuneSST2:
         self.opt_state = self.opt.init(self.trainable_params)
 
         print(f"DEBUG: params before learning: \n{self.trainable_params['BERT/classifier_head']['w']}")
+        # Priority functions setup
+        print("Constructing priority function...")
+        priority_fn_ctor = priorities.get_priority_fn_ctor(priority_criterion)
+        print("...done")
+        print(f"[DEBUG] Using priority: {priority_criterion}")
 
+        print("Setting up enn batch forwarder...")
+        self.enn_batch_fwd = forwarders.make_batch_fwd(
+            self.model, num_enn_samples=self.priority_fn_enn_samples 
+        )
+        print("...done")
+        print("Constructing priority function...")
+        self.priority_fn = priority_fn_ctor(self.enn_batch_fwd)
+        print("...done")
+    
     def tokenize(self, texts):
         tokens = self.tokenizer(
             texts,
@@ -182,42 +226,116 @@ class BERTENNFineTuneSST2:
         )
         return tokens
 
+#    def select_uncertain_samples(self, pool, num_samples=10):
+#        tokens = self.tokenize(pool['sentence'])
+#        input_ids = tokens['input_ids']
+#        batch = datasets.ArrayBatch(x=input_ids, y=np.array(pool['label']))
+#        scores, _ = self.priority_fn(self.params, self.state, batch, next(self.rng))
+#        selected_indices = jnp.argsort(scores)[-num_samples:]
+#        return [pool[i] for i in selected_indices]
 
-    def compute_accuracy(self, logits: jnp.ndarray, labels: jnp.ndarray) -> float:
-        predictions = jnp.argmax(logits, axis=-1)
-        return jnp.mean(predictions == labels)
 
-    def run(self):
-        train_labels = jnp.array([item['label'] for item in self.dataset])
-        all_indices = jnp.arange(len(train_labels))
-        
+    def evaluate_validation_loss(self):
+        val_labels = jnp.array([item['label'] for item in self.val_dataset])
+        batch_size = 32  # or 64 or whatever your GPU can handle
+        num_batches = len(val_labels) // batch_size + (len(val_labels) % batch_size != 0)
+    
         losses = []
-        accuracies = []
-        indexer_fn = lambda key: self.indexer(key=key)
-
-        for step in tqdm(range(self.num_steps)):
-            batch_indices = jax.random.choice(
-            key=next(self.rng),
-            a=jnp.arange(len(self.dataset)),
-            shape=(self.batch_size,),
-            replace=True,
-        )
-            batch_input_ids = jnp.stack([jnp.array(self.dataset[int(i)]['input_ids']) for i in batch_indices])
-            batch_token_type_ids = jnp.stack([jnp.array(self.dataset[int(i)]['token_type_ids']) for i in batch_indices])
-            batch_attention_mask = jnp.stack([jnp.array(self.dataset[int(i)]['attention_mask']) for i in batch_indices])
- 
-#            batch_labels = jnp.array([self.dataset[int(i)]['label'] for i in batch_indices])
-            batch_labels = self.labels[batch_indices]
-        
+    
+        for i in range(num_batches):
+            batch_indices = jnp.arange(i * batch_size, min((i + 1) * batch_size, len(val_labels)))
+    
+            batch_input_ids = jnp.stack([jnp.array(self.val_dataset[int(i)]['input_ids']) for i in batch_indices])
+            batch_token_type_ids = jnp.stack([jnp.array(self.val_dataset[int(i)]['token_type_ids']) for i in batch_indices])
+            batch_attention_mask = jnp.stack([jnp.array(self.val_dataset[int(i)]['attention_mask']) for i in batch_indices])
+            batch_labels = val_labels[batch_indices]
+    
             input = BertInput(
                 token_ids=batch_input_ids,
                 segment_ids=batch_token_type_ids,
                 input_mask=batch_attention_mask,
             )
             batch = ArrayBatch(x=input, y=batch_labels)
+    
+            combined_params = hk.data_structures.merge(self.frozen_params, self.trainable_params)
+            output, _ = self.model.apply(combined_params, self.state, batch.x, index=self.indexer(next(self.rng)))
+            logits = output.extra['classification_logits']
+    
+            loss = optax.softmax_cross_entropy_with_integer_labels(logits, batch.y).mean()
+            losses.append(loss)
+    
+        mean_val_loss = jnp.mean(jnp.array(losses))
+        return float(mean_val_loss)
+
+
+
+    def compute_accuracy(self, logits: jnp.ndarray, labels: jnp.ndarray) -> float:
+        predictions = jnp.argmax(logits, axis=-1)
+        return jnp.mean(predictions == labels)
+
+    def run(self):
+        run_start = time.time()
+        train_labels = jnp.array([item['label'] for item in self.dataset])
+        all_indices = jnp.arange(len(train_labels))
+        
+        losses = []
+        accuracies = []
+
+        indexer_fn = lambda key: self.indexer(key=key)
+
+        for step in tqdm(range(self.num_steps)):
+            candidate_indices = jax.random.choice(
+                key=next(self.rng),
+                a=jnp.arange(len(self.dataset)),
+                shape=(self.NB,),
+                replace=False,
+            )
+            
+            # Build candidate batch
+            candidate_input_ids = self.input_ids[candidate_indices]
+            candidate_token_type_ids = self.token_type_ids[candidate_indices]
+            candidate_attention_mask = self.attention_masks[candidate_indices]
+ 
+            candidate_input = BertInput(
+                token_ids=candidate_input_ids,
+                segment_ids=candidate_token_type_ids,
+                input_mask=candidate_attention_mask,
+            )
+
+            # Build ArrayBatch for the candidates
+            candidate_batch = ArrayBatch(
+                x=candidate_input,
+                y=self.labels[candidate_indices]
+            )
+            
+            # Score candidate examples with the priority function
+            scores, _ = self.priority_fn(
+                params=hk.data_structures.merge(self.frozen_params, self.trainable_params),
+                state=self.state,
+                batch=candidate_batch,
+                key=next(self.rng)
+            )
+            
+            # Select the top self.batch_size samples
+            selected_indices_in_pool = jnp.argsort(scores)[-self.nb:]
+            batch_indices = candidate_indices[selected_indices_in_pool]
+
+            batch_input_ids = self.input_ids[batch_indices]
+            batch_token_ids = self.token_type_ids[batch_indices]
+            batch_attention_mask = self.attention_masks[batch_indices]
+ 
+#            batch_labels = jnp.array([self.dataset[int(i)]['label'] for i in batch_indices])
+            batch_labels = self.labels[batch_indices]
+        
+            input = BertInput(
+                token_ids=batch_input_ids,
+                segment_ids=batch_token_ids,
+                input_mask=batch_attention_mask,
+            )
+            batch = ArrayBatch(x=input, y=batch_labels)
 
             ##############################################
-
+            # ======= UPDATE STEP ======= 
             self.trainable_params, self.state, self.opt_state, loss = update_step(
                 self.trainable_params,
                 self.state,
@@ -230,41 +348,54 @@ class BERTENNFineTuneSST2:
                 optimizer=self.opt,
                 indexer=indexer_fn,
             )
-    
-            # Compute accuracy
-            combined_params = hk.data_structures.merge(self.frozen_params, self.trainable_params)
-            #output, _ = base_model.apply(combined_params, next(self.rng), batch.x)
-            index = self.indexer(next(self.rng))
-#            output, _ = self.model.apply(combined_params, self,state, next(self.rng), batch.x, index=index)
-            output, _ = self.model.apply(
-                params=combined_params, 
-                state=self.state,
-                inputs=batch.x, 
-                index=index
-            )
-            logits = output.extra['classification_logits']
-            acc = float(self.compute_accuracy(logits, batch.y))
+            
             losses.append(float(loss))
-            accuracies.append(acc)
-    
+
+            # === VALIDATION EVALUATION every 100 steps ===
+            if step % 100 == 0:
+                val_loss = self.evaluate_validation_loss()
+                #val_losses.append(val_loss)
+            
+            # Compute accuracy
+#            combined_params = hk.data_structures.merge(self.frozen_params, self.trainable_params)
+#            #output, _ = base_model.apply(combined_params, next(self.rng), batch.x)
+#            index = self.indexer(next(self.rng))
+##            output, _ = self.model.apply(combined_params, self,state, next(self.rng), batch.x, index=index)
+#            output, _ = self.model.apply(
+#                params=combined_params, 
+#                state=self.state,
+#                inputs=batch.x, 
+#                index=index
+#            )
+#            logits = output.extra['classification_logits']
+#            acc = float(self.compute_accuracy(logits, batch.y))
+#            losses.append(float(loss))
+#            accuracies.append(acc)
+        run_end = time.time()
+        print(f"🕒 Run {i+1} duration: {run_end - run_start:.2f} seconds")    
         return losses, accuracies
 
 
 
 if __name__ == "__main__":
+    start_time = time.time()
     print("\n\nFine tuning of BERT ENN model for SST2 classification\n\n")
-
     parser = argparse.ArgumentParser(description="Fine-tune BERT on SST2")
     parser.add_argument('--train_all', action='store_true', help='If set, trains all model parameters.')
     parser.add_argument('--test', action='store_true', help='If set, runs a faster test on 50 training steps and 3 number of repetitions')
     parser.add_argument('--suffix', type=str, default="", help="Optional suffix for output file names.")
     parser.add_argument('--save_params', action='store_true', help='If set, saves the final trained parameters.')
     parser.add_argument('--load_params', action='store_true', help='If set, loads previously saved parameters.')
-#    parser.add_argument('--params_path', type=str, default='saved_params.npz', help='Path to load/save model parameters.')
+    parser.add_argument('--load_params_path', type=str, default=None, help='Path to loadmodel parameters.')
+    parser.add_argument('--save_params_path', type=str, default=None, help='Path to save model parameters.')
     parser.add_argument('--learning_rate', type=float, default=3e-5, help='Learning rate for optimizer.') 
+    parser.add_argument('--priority', type=str, default='uniform', help='Priority criterion. Default: "uniform". Available: "uniform", "variance", "entropy", "margin", "bald"') 
+    parser.add_argument('--NB', type=int, default=40, help='Candidate pool size.') 
+    parser.add_argument('--nb', type=int, default=4, help='Number of samples selected for training.')
+    parser.add_argument('--num_runs', type=int, default=2, help='Number of seeds to run')
     args = parser.parse_args()
 
-    SEED = 0
+    SEED = args.seed if hasattr(args, 'seed') else 0
     rng = hk.PRNGSequence(SEED)
 
     print("Downloading BERT base model from Hugging Face 🤗...")
@@ -325,6 +456,11 @@ if __name__ == "__main__":
     print("Pretokenizing the dataset...")
     dataset = dataset.map(lambda x: {'sentence': x['sentence'], 'label': x['label']})
     dataset = preprocess_dataset(dataset['train'], tokenizer)
+    
+    full_dataset = dataset
+    split = int(0.9*len(full_dataset))
+    train_dataset = full_dataset.select(range(split))
+    val_dataset = full_dataset.select(range(split, len(full_dataset)))
     print("...done")
 
 
@@ -334,64 +470,106 @@ if __name__ == "__main__":
         'epochs': 1,
         'learning_rate': args.learning_rate,
         'seed': rng,
-        'num_runs': 5,
+        'num_runs': args.num_runs,
     }
+
     if args.test:
         config['num_steps'] = 50
         config['num_runs'] = 3
 
+    config_dict = {
+            "train_all": args.train_all,
+            "test": args.test,
+            "suffix": args.suffix,
+            "save_params": args.save_params,
+            "load_params": args.load_params,
+            "load_params_path": args.load_params_path,
+            "save_params_path": args.save_params_path,
+            "learning_rate": args.learning_rate,
+            "priority": args.priority,
+            "batch_size": config['batch_size'],
+            "NB": args.NB,
+            "nb": args.nb,
+            "num_steps": config['num_steps'],
+            "num_runs": config['num_runs'],
+            "seed": SEED,  
+        }
+
+
     all_loss_df = pd.DataFrame()
     all_acc_df = pd.DataFrame()
 
-    if args.load_params and os.path.exists(args.params_path):
-        print(f"🔁 Loading pretrained parameters from: {args.params_path}")
-        with np.load(args.params_path, allow_pickle=True) as f:
+    if args.load_params and args.load_params_path is not None:
+        print(f"🔁 Loading pretrained parameters from: {args.load_params_path}")
+        with np.load(args.load_params_path, allow_pickle=True) as f:
             loaded_params = f['params'].item()
         params = hk.data_structures.to_immutable_dict(loaded_params)
     else:
         print("🚀 Using default initialized parameters (with preloaded encoder weights)")
+
     
+    suffix = f"_{args.suffix}" if args.suffix else ""
+    # Create an output directory per job ID
+    output_dir = f"outputs/job{suffix}"
+    print(f"\n\nMaking directory {output_dir}")
+    os.makedirs(output_dir, exist_ok=True)
+    print(f"📂 Saving all outputs to {output_dir}")
+    config_path = os.path.join(output_dir, "config.json")
+    with open(config_path, "w") as f:
+        json.dump(config_dict, f, indent=4)
+    print(f"Saved config to {config_path}")
+
     print("Running experiment...")
     for i in range(config['num_runs']):
         print(f"\n▶️ Run {i + 1}/{config['num_runs']}") 
+        seed = SEED + i
+        rng = hk.PRNGSequence(seed)
 
         experiment = BERTENNFineTuneSST2(
             model=base_model,
-            dataset = dataset,
+            dataset = train_dataset,
+            val_dataset = val_dataset,
             tokenizer = tokenizer,
-            rng = next(config['seed']),
+            rng = next(rng),
             batch_size = config['batch_size'],
             criterion = 'num_steps',
             num_steps = config['num_steps'],
             learning_rate = config['learning_rate'],
             train_all = args.train_all,
-            pretrained_params=params
+            pretrained_params=params,
+            priority_criterion = args.priority,
         )
+        jax.profiler.start_trace(f"/tmp/jax_trace_{suffix}")
         losses, acc = experiment.run()
+        jax.profiler.stop_trace()
 
         all_loss_df[f'run_{i+1}'] = losses
         all_acc_df[f'run_{i+1}'] = acc
 
-        if args.save_params:
-            print(f"💾 Saving final trained parameters to: {args.params_path}")
+        if args.save_params and args.save_params_path is not None:
+            print(f"🔁 Saving pretrained parameters to: {args.save_params_path}")
             final_combined_params = hk.data_structures.merge(experiment.frozen_params, experiment.trainable_params)
-            np.savez(args.params_path, params=final_combined_params)
+            np.savez(args.save_params_path, params=final_combined_params)
 
-    suffix = f"_{args.suffix}" if args.suffix else ""
+#        if args.save_params:
+#            print(f"💾 Saving final trained parameters to: {args.params_path}")
+#            final_combined_params = hk.data_structures.merge(experiment.frozen_params, experiment.trainable_params)
+#            np.savez(args.params_path, params=final_combined_params)
 
-    if args.train_all:
-        losses_file_name = f"outputs/all_params_losses{suffix}.csv"
-        accs_file_name = f"outputs/all_accs_losses{suffix}.csv"
-        img_file_name = f"outputs/all_params_BERT-base{suffix}"
-    else:
-        losses_file_name = f"outputs/subset_params_losses{suffix}.csv"
-        accs_file_name = f"outputs/subset_params_accs{suffix}.csv"
-        img_file_name = f"outputs/subset_params_BERT-base{suffix}"
-        all_loss_df.to_csv(losses_file_name , index_label="step")
-        all_acc_df.to_csv(accs_file_name , index_label="step")
-   
+    losses_file_name = f"{output_dir}/losses{suffix}.csv"
+    accs_file_name = f"{output_dir}/accs{suffix}.csv"
+    img_file_name = f"{output_dir}/img{suffix}.png"
+  
+    all_loss_df.to_csv(losses_file_name, index_label="step")
+    all_acc_df.to_csv(accs_file_name, index_label="step")
 
    # plot_loss_and_accuracy_curve(losses_file_name, accs_file_name, img_file_name)
-    plot_all_runs_with_mean(losses_file_name, accs_file_name, img_file_name) 
+    #plot_all_runs_with_mean(losses_file_name, img_file_name) 
     save_results_to_file(losses, acc)
     print(f"DEBUG: params after learning: \n{experiment.trainable_params['BERT/classifier_head']['w']}")
+    end_time = time.time()
+    elapsed = end_time - start_time
+    mins, secs = divmod(int(elapsed), 60)
+    hours, mins = divmod(mins, 60)
+    
+    print(f"\n⏱️ Total run time: {hours}h {mins}m {secs}s")

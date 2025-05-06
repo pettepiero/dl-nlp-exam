@@ -11,3 +11,4 @@ manim-stuff/enns/media
 manim-stuff/enns/enns_assets/
 *.csv
 logs/
+*.npz

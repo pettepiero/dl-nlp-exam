@@ -60,22 +60,11 @@ def plot_loss_and_accuracy_curve(loss_file: str, acc_file: str, save_path: str):
     print(f"✅ Loss and accuracy curve saved to {save_path}")
 
 
-def plot_all_runs_with_mean(loss_file: str, acc_file: str, save_path: str):
+def plot_all_runs_with_mean(loss_file: str, save_path: str):
     """
-    Plot all individual runs and their mean for loss and accuracy.
+    Plot all individual runs and their mean for loss only.
+    Accuracy plotting is skipped.
     """
-#    available_priorities = ["ENN", "BERT-base", "uniform", "entropy", "margin", "bald", "variance"]
-#    matched_priority = next((p for p in available_priorities if p in save_path), None)
-#
-#    if matched_priority:
-#        title = f"Training Metrics over Steps using {matched_priority}"
-#    else:
-#        print(
-#            "Error in plot_all_runs_with_mean: save_path must contain "
-#            "one of the available priority functions"
-#        )
-#        return
-
     # Read data
     loss_df = pd.read_csv(loss_file)
     acc_df = pd.read_csv(acc_file)
@@ -93,26 +82,15 @@ def plot_all_runs_with_mean(loss_file: str, acc_file: str, save_path: str):
     mean_loss = loss_df.drop(columns=['step']).mean(axis=1)
     plt.plot(steps, mean_loss, color='blue', label='Mean Loss', linewidth=3)
 
-    # Plot each run for accuracy
-    for col in acc_df.columns:
-        if col != 'step':
-            plt.plot(steps, acc_df[col], color='orange', alpha=0.3, linewidth=1)
-
-    # Plot mean accuracy
-    mean_acc = acc_df.drop(columns=['step']).mean(axis=1)
-    plt.plot(steps, mean_acc, color='orange', label='Mean Accuracy', linewidth=3)
-
     plt.xlabel("Step")
-    plt.ylabel("Metric Value")
-    #plt.title(title)
-    plt.title("Training metrics over steps")
+    plt.ylabel("Loss")
+    plt.title("Training Loss over steps")
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(save_path)
     plt.show()
     print(f"✅ All runs and mean saved to {save_path}")
-
 
 
 def save_results_to_file(losses: list, accs: list):

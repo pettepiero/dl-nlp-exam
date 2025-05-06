@@ -15,6 +15,7 @@
 # ============================================================================
 import os
 import json
+import time
 import matplotlib.pyplot as plt
 import argparse
 from typing import NamedTuple, Optional
@@ -98,6 +99,8 @@ class BERTENNFineTuneSST2:
         priority_criterion: str='uniform',
         priority_fn_enn_samples: int=10,
         batch_gradient_enn_samples: int=10,
+        NB: int = 40,
+        nb: int = 4,
     ):
         self.model = model 
         self.dataset = dataset
@@ -110,6 +113,8 @@ class BERTENNFineTuneSST2:
         self.indexer = model.indexer
         self.priority_fn_enn_samples = priority_fn_enn_samples
         self.batch_gradient_enn_samples = batch_gradient_enn_samples
+        self.NB = NB
+        self.nb = nb
 
         if criterion == 'num_steps':
             if num_steps is None:
@@ -138,6 +143,17 @@ class BERTENNFineTuneSST2:
 
         self.params = hk.data_structures.to_immutable_dict(self.params)
         self.labels = jnp.array([ex['label'] for ex in self.dataset])
+
+        # preprocessing of the dataset
+        self.input_ids = jnp.stack([jnp.array(ex["input_ids"]) for ex in self.dataset])
+        self.token_type_ids = jnp.stack([jnp.array(ex["token_type_ids"]) for ex in self.dataset])
+        self.attention_masks = jnp.stack([jnp.array(ex["attention_mask"]) for ex in self.dataset])
+
+        self.val_input_ids = jnp.stack([jnp.array(ex["input_ids"]) for ex in self.val_dataset])
+        self.val_token_type_ids = jnp.stack([jnp.array(ex["token_type_ids"]) for ex in self.val_dataset])
+        self.val_attention_masks = jnp.stack([jnp.array(ex["attention_mask"]) for ex in self.val_dataset])
+
+
 
         def print_tree(params, prefix=""):
             for k, v in params.items():
@@ -189,6 +205,7 @@ class BERTENNFineTuneSST2:
         print("Constructing priority function...")
         priority_fn_ctor = priorities.get_priority_fn_ctor(priority_criterion)
         print("...done")
+        print(f"[DEBUG] Using priority: {priority_criterion}")
 
         print("Setting up enn batch forwarder...")
         self.enn_batch_fwd = forwarders.make_batch_fwd(
@@ -257,6 +274,7 @@ class BERTENNFineTuneSST2:
         return jnp.mean(predictions == labels)
 
     def run(self):
+        run_start = time.time()
         train_labels = jnp.array([item['label'] for item in self.dataset])
         all_indices = jnp.arange(len(train_labels))
         
@@ -266,7 +284,7 @@ class BERTENNFineTuneSST2:
         indexer_fn = lambda key: self.indexer(key=key)
 
         for step in tqdm(range(self.num_steps)):
-            candidate_pool_size = 5* self.batch_size
+            candidate_pool_size = 5*self.batch_size
             candidate_indices = jax.random.choice(
                 key=next(self.rng),
                 a=jnp.arange(len(self.dataset)),
@@ -275,10 +293,10 @@ class BERTENNFineTuneSST2:
             )
             
             # Build candidate batch
-            candidate_input_ids = jnp.stack([jnp.array(self.dataset[int(i)]['input_ids']) for i in candidate_indices])
-            candidate_token_type_ids = jnp.stack([jnp.array(self.dataset[int(i)]['token_type_ids']) for i in candidate_indices])
-            candidate_attention_mask = jnp.stack([jnp.array(self.dataset[int(i)]['attention_mask']) for i in candidate_indices])
-            
+            candidate_input_ids = self.input_ids[candidate_indices]
+            candidate_token_type_ids = self.token_type_ids[candidate_indices]
+            candidate_attention_mask = self.attention_masks[candidate_indices]
+ 
             candidate_input = BertInput(
                 token_ids=candidate_input_ids,
                 segment_ids=candidate_token_type_ids,
@@ -303,17 +321,16 @@ class BERTENNFineTuneSST2:
             selected_indices_in_pool = jnp.argsort(scores)[-self.batch_size:]
             batch_indices = candidate_indices[selected_indices_in_pool]
 
-
-            batch_input_ids = jnp.stack([jnp.array(self.dataset[int(i)]['input_ids']) for i in batch_indices])
-            batch_token_type_ids = jnp.stack([jnp.array(self.dataset[int(i)]['token_type_ids']) for i in batch_indices])
-            batch_attention_mask = jnp.stack([jnp.array(self.dataset[int(i)]['attention_mask']) for i in batch_indices])
+            batch_input_ids = self.input_ids[batch_indices]
+            batch_token_ids = self.token_type_ids[batch_indices]
+            batch_attention_mask = self.attention_masks[batch_indices]
  
 #            batch_labels = jnp.array([self.dataset[int(i)]['label'] for i in batch_indices])
             batch_labels = self.labels[batch_indices]
         
             input = BertInput(
                 token_ids=batch_input_ids,
-                segment_ids=batch_token_type_ids,
+                segment_ids=batch_token_ids,
                 input_mask=batch_attention_mask,
             )
             batch = ArrayBatch(x=input, y=batch_labels)
@@ -338,7 +355,7 @@ class BERTENNFineTuneSST2:
             # === VALIDATION EVALUATION every 100 steps ===
             if step % 100 == 0:
                 val_loss = self.evaluate_validation_loss()
-                val_losses.append(val_loss)
+                #val_losses.append(val_loss)
             
             # Compute accuracy
 #            combined_params = hk.data_structures.merge(self.frozen_params, self.trainable_params)
@@ -355,14 +372,15 @@ class BERTENNFineTuneSST2:
 #            acc = float(self.compute_accuracy(logits, batch.y))
 #            losses.append(float(loss))
 #            accuracies.append(acc)
-    
+        run_end = time.time()
+        print(f"🕒 Run {i+1} duration: {run_end - run_start:.2f} seconds")    
         return losses, accuracies
 
 
 
 if __name__ == "__main__":
+    start_time = time.time()
     print("\n\nFine tuning of BERT ENN model for SST2 classification\n\n")
-
     parser = argparse.ArgumentParser(description="Fine-tune BERT on SST2")
     parser.add_argument('--train_all', action='store_true', help='If set, trains all model parameters.')
     parser.add_argument('--test', action='store_true', help='If set, runs a faster test on 50 training steps and 3 number of repetitions')
@@ -373,9 +391,12 @@ if __name__ == "__main__":
     parser.add_argument('--save_params_path', type=str, default=None, help='Path to save model parameters.')
     parser.add_argument('--learning_rate', type=float, default=3e-5, help='Learning rate for optimizer.') 
     parser.add_argument('--priority', type=str, default='uniform', help='Priority criterion. Default: "uniform". Available: "uniform", "variance", "entropy", "margin", "bald"') 
+    parser.add_argument('--NB', type=int, default=40, help='Candidate pool size.') 
+    parser.add_argument('--nb', type=int, default=4, help='Number of samples selected for training.')
+    parser.add_argument('--num_runs', type=int, default=3, help='Number of seeds to run')
     args = parser.parse_args()
 
-    SEED = 0
+    SEED = args.seed if hasattr(args, 'seed') else 0
     rng = hk.PRNGSequence(SEED)
 
     print("Downloading BERT base model from Hugging Face 🤗...")
@@ -450,7 +471,7 @@ if __name__ == "__main__":
         'epochs': 1,
         'learning_rate': args.learning_rate,
         'seed': rng,
-        'num_runs': 2,
+        'num_runs': args.num_runs,
     }
 
     if args.test:
@@ -468,6 +489,8 @@ if __name__ == "__main__":
             "learning_rate": args.learning_rate,
             "priority": args.priority,
             "batch_size": config['batch_size'],
+            "NB": args.NB,
+            "nb": args.nb,
             "num_steps": config['num_steps'],
             "num_runs": config['num_runs'],
             "seed": SEED,  
@@ -500,19 +523,22 @@ if __name__ == "__main__":
     print("Running experiment...")
     for i in range(config['num_runs']):
         print(f"\n▶️ Run {i + 1}/{config['num_runs']}") 
+        seed = SEED + i
+        rng = hk.PRNGSequence(seed)
 
         experiment = BERTENNFineTuneSST2(
             model=base_model,
             dataset = train_dataset,
             val_dataset = val_dataset,
             tokenizer = tokenizer,
-            rng = next(config['seed']),
+            rng = next(rng),
             batch_size = config['batch_size'],
             criterion = 'num_steps',
             num_steps = config['num_steps'],
             learning_rate = config['learning_rate'],
             train_all = args.train_all,
-            pretrained_params=params
+            pretrained_params=params,
+            priority_criterion = args.priority,
         )
         losses, acc = experiment.run()
 
@@ -537,6 +563,12 @@ if __name__ == "__main__":
     all_acc_df.to_csv(accs_file_name, index_label="step")
 
    # plot_loss_and_accuracy_curve(losses_file_name, accs_file_name, img_file_name)
-    plot_all_runs_with_mean(losses_file_name, accs_file_name, img_file_name) 
+    #plot_all_runs_with_mean(losses_file_name, img_file_name) 
     save_results_to_file(losses, acc)
     print(f"DEBUG: params after learning: \n{experiment.trainable_params['BERT/classifier_head']['w']}")
+    end_time = time.time()
+    elapsed = end_time - start_time
+    mins, secs = divmod(int(elapsed), 60)
+    hours, mins = divmod(mins, 60)
+    
+    print(f"\n⏱️ Total run time: {hours}h {mins}m {secs}s")
