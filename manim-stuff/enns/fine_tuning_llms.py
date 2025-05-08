@@ -120,7 +120,6 @@ class FineTuningLLMs(Slide):
 
         # 6. Fine tuning with ENN
 
-
 # Active learning framework
 class ActiveLearningFramework(Slide):
     def al_scatter_plot_animation(self, shift = None, fade_out_circles = False, faster=False, scale_factor: float = 1, show_line=True, highlight_dots=True):
@@ -517,16 +516,23 @@ class ActiveLearningFramework(Slide):
         self.time_step_animation(scatter_plot_small, 2)
         self.next_slide()
 
-        # Clean plot, introduce priority functions
-        self.play(FadeOut(full_notation_text), run_time=SPEEDUP_TIME)
+        pick_index_text = full_notation_text[8]
+        # move the pick index text to center and fade out the rest
+        self.play(
+            pick_index_text.animate.move_to(ORIGIN),
+            *[FadeOut(obj) for obj in full_notation_text if obj != pick_index_text],
+            FadeOut(scatter_plot_small),
+            run_time=SPEEDUP_TIME,
+        )
+
+        self.next_slide()
+        self.play(FadeOut(pick_index_text), run_time=SPEEDUP_TIME)
         # self.play(FadeOut(scatter_plot_small[4]), run_time=SPEEDUP_TIME)
         # self.play(*[ApplyMethod(dot.set_color, GRAY) for dot in scatter_plot[3]])
         self.play(
             FadeOut(title),
-            FadeOut(scatter_plot_small),
             run_time=SPEEDUP_TIME)
         self.next_slide()
-
 
 class PriorityFunctions(Slide):
     def create_classification_squares(self, group_g_arrow, shift: np.ndarray=ORIGIN):
@@ -903,7 +909,6 @@ class ComparisonActiveLearningAgents(Slide):
         self.wait(1)
         self.next_slide()
 
-
 class LMExperiment(Slide):
     def create_GLUE_tasks(self, words):
         squares = VGroup()
@@ -1095,6 +1100,536 @@ class Results(Slide):
             FadeOut(fig5), FadeOut(title), FadeOut(text_fig5), run_time=SPEEDUP_TIME
         )
 
+class Project(Slide):
+    def flow_chart(self):
+        text_1 = Tex(
+            r"1. Load pretrained BERT model",
+            font_size=30,
+        ).move_to([-1, 1.4, 0])
+        text_2 = Tex(
+            r"2. Prepare STS dataset",
+            font_size=30,
+        ).move_to([0, 0.8, 0]).align_to(text_1, LEFT)
+        text_3 = Tex(
+            r"3. Create regression head for STS",
+            font_size=30,
+        ).move_to([0, 0.2, 0]).align_to(text_1, LEFT)
+        text_4 = Tex(
+            r"4. Define loss function for regression",
+            font_size=30,
+        ).move_to([0, -0.4, 0]).align_to(text_1, LEFT)
+        text_5 = Tex(
+            r"5. Define active learning priority functions",
+            font_size=30,
+        ).move_to([0, -1.0, 0]).align_to(text_1, LEFT)
+        text_6 = (
+            Tex(
+                r"6. Fine-tune BERT with STS dataset",
+                font_size=30,
+            )
+            .move_to([0, -1.6, 0])
+            .align_to(text_1, LEFT)
+        )
+
+        flow_chart = VGroup(text_1, text_2, text_3, text_4, text_5, text_6)
+        return flow_chart
+
+    def first_flow_chart(self):
+        text_1 = Tex(
+            r"1. Get BERT pretrained model",
+            font_size=30,
+        ).move_to([-1, 1.4, 0])
+        text_2 = Tex(
+            r"2. Create a regression head",
+            font_size=30,
+        ).move_to([0, 0.8, 0]).align_to(text_1, LEFT)
+        text_3 = Tex(
+            r"3. Prepare dataset",
+            font_size=30,
+        ).move_to([0, 0.2, 0]).align_to(text_1, LEFT)
+        text_4 = Tex(
+            r"4. Fine tune model",
+            font_size=30,
+        ).move_to([0, -0.4, 0]).align_to(text_1, LEFT)
+
+        flow_chart = VGroup(text_1, text_2, text_3, text_4)
+        return flow_chart
+
+    def second_flow_chart(self):
+        text_1 = Tex(
+            r"1. Get BERT-base pretrained model \\ from HuggingFace (PyTorch or TensorFlow)",
+            font_size=30,
+        ).move_to([1, 1.4, 0])
+        text_2 = Tex(
+            r"2. Modify BERT Haiku implementation to create classification head \\ (base model without ENNs)",
+            font_size=30,
+        ).move_to([0, 0.2, 0]).align_to(text_1, LEFT)
+        text_3 = (
+            Tex(
+                r"3. Modify ENN library to add epinet architecture to classifier BERT base model.",
+                font_size=30,
+            )
+            .move_to([0, -0.8, 0])
+            .align_to(text_1, LEFT)
+        )
+        text_4 = Tex(
+            r"4. Fine tune model",
+            font_size=30,
+        ).move_to([0, -1.2, 0]).align_to(text_1, LEFT)
+
+        flow_chart = VGroup(text_1, text_2, text_3, text_4)
+        return flow_chart
+
+    def sst2_task(self):
+        description_text = Tex(
+            r'"\textit{hilariously inept \\ and ridiculous.}"',
+            font_size=30,
+        ).move_to([-5, 0, 0])
+        bert_text = Tex(
+            r"Fine-tuned \\ BERT",
+            font_size=30,
+        ).next_to(description_text, RIGHT, buff=0.5)
+        bert_box = SurroundingRectangle(
+            bert_text, color=WHITE, buff=0.1
+        ).set_fill(BLUE, opacity=0.5)
+        classification_head_text = Tex(
+            r"Classification \\ head",
+            font_size=30,
+        ).next_to(bert_text, RIGHT, buff=0.5)
+        head_box = SurroundingRectangle(
+            classification_head_text, color=WHITE, buff=0.1
+        ).set_fill(BLUE, opacity=0.5)
+        text_positive = Tex(
+            r"Positive",
+            font_size=30,
+        ).move_to([5, 1, 0])
+        text_negative = Tex(
+            r"Negative",
+            font_size=30,
+        ).move_to([5, -1, 0])
+        arrow1 = Arrow(
+            classification_head_text.get_right(),
+            text_positive.get_left(),
+            buff=0.1,
+            color=WHITE,
+        )
+        arrow2 = Arrow(
+            classification_head_text.get_right(),
+            text_negative.get_left(),
+            buff=0.1,
+            color=WHITE,
+        )
+
+        sst2_task = VGroup(
+            description_text,
+            bert_text,
+            bert_box,
+            classification_head_text,
+            head_box,
+            text_positive,
+            text_negative,
+            arrow1,
+            arrow2,
+        )
+
+        return sst2_task
+
+    def construct(self):
+        title = Tex(
+            r"Project", font_size=50, color=BLUE
+        ).to_edge(UP + LEFT)
+        text_project = Tex(
+            r"Reproducing Osband's results Stanford Sentiment Treebank (SST2) task",
+            font_size=30,
+        ).next_to(title, DOWN, buff=0.5, aligned_edge=LEFT)
+
+        # SST2 slide
+        first_scheme_group = self.sst2_task()
+
+        self.play(
+            FadeIn(title),
+            FadeIn(text_project),
+            *[Create(obj) for obj in first_scheme_group[:-2]],
+            run_time=SPEEDUP_TIME,
+        )
+        self.wait(0.1)
+        self.play(
+            Write(first_scheme_group[-2]),
+            Write(first_scheme_group[-1]),
+            run_time=SPEEDUP_TIME,
+        )
+        self.next_slide()
+        self.play(
+            FadeOut(first_scheme_group),
+            run_time=SPEEDUP_TIME
+        )
+        self.wait(0.2)
+
+        first_flow_chart = self.first_flow_chart()
+
+        flow_chart = self.second_flow_chart()
+        flow_chart.shift(RIGHT*4)
+        self.play(
+            Write(first_flow_chart),
+            run_time=SPEEDUP_TIME
+        )
+        self.next_slide()
+        self.play(
+            first_flow_chart.animate.shift(LEFT*2),
+            run_time=SPEEDUP_TIME
+        )
+        self.wait(0.2)
+        self.play(
+            Write(flow_chart),
+            run_time=SPEEDUP_TIME
+        )
+        self.next_slide()
+
+        self.play(
+            FadeOut(first_flow_chart),
+            FadeOut(flow_chart),
+            FadeOut(title),
+            FadeOut(text_project),
+            run_time=SPEEDUP_TIME
+        )
+
+class EpinetNetworkDiagram(Slide):
+
+    def construct(self):
+        c = NumberPlane().add_coordinates()
+        self.play(Write(c))
+        # Standard font size
+        fs_main = 25
+        fs_labels = 22
+
+        # Colors
+        base_color = BLUE
+        feature_color = PURPLE
+        epinet_color = RED
+        param_color = BLUE_A
+        input_color = YELLOW
+        index_color = ORANGE
+        reference_color = GREEN
+        output_color = PINK
+
+        # Base Net
+        base_net_box = DashedVMobject(
+            Rectangle(color=base_color, width=3.5, height=2.2).move_to(
+                [-3, 2, 0]
+            ), num_dashes=50
+        )
+        base_network = (
+            Rectangle(width=2, height=0.6)
+            .set_color(WHITE)
+            .move_to(base_net_box.get_center() + DOWN * 0.4)
+        )
+        base_text = MathTex(r"\text{Base network } \mu", font_size=fs_main).move_to(
+            base_network.get_center()
+        )
+        param_zeta = (
+            Rectangle(width=1.6, height=0.6)
+            .set_color(param_color)
+            .next_to(base_network, UP, buff=0.3)
+        )
+        param_text = MathTex(r"\text{Parameters } \zeta", font_size=fs_labels).move_to(
+            param_zeta.get_center()
+        )
+        base_net_label = Tex(
+            r"\textbf{Base net}", font_size=fs_labels, color=base_color
+        ).next_to(base_net_box, UP, buff=0.1)
+
+        # Input
+        input_box = Rectangle(color=input_color, height=0.8, width=1.5)
+        input_text = MathTex(r"\text{Input } \mathbf{x}", font_size=fs_main).move_to(
+            input_box.get_center()
+        )
+        input_group = VGroup(input_box, input_text).next_to(
+            base_network.get_left(), LEFT, buff=1
+        )
+
+        # Epinet
+        epinet_box = DashedVMobject(
+            Rectangle(color=epinet_color, width=5, height=4)
+            .move_to([3.5, -1, 0]),
+            num_dashes=70
+        )
+        epinet_label = Tex(
+            r"\textbf{Epinet}", font_size=fs_main, color=epinet_color
+        ).next_to(epinet_box, UP, buff=0.1)
+
+        # Prior network
+        prior_box = (
+            Rectangle(width=2.2, height=0.6)
+            .set_color(GREY)
+            .move_to(epinet_box.get_top() + DOWN * 0.8 + LEFT * 1.1)
+        )
+        prior_text = MathTex(
+            r"\text{Prior network } \sigma^P", font_size=fs_labels
+        ).move_to(prior_box.get_center())
+
+        # Learnable
+        learn_box = (
+            Rectangle(width=2.2, height=0.6)
+            .set_color(GREY)
+            .next_to(prior_box, DOWN, buff=0.6)
+        )
+        learn_text = MathTex(
+            r"\text{Learnable } \sigma^L", font_size=fs_labels
+        ).move_to(learn_box.get_center())
+
+        # Features
+        features_box = Rectangle(color=feature_color, width=2.2, height=0.6).move_to(
+            [base_net_box.get_center()[0], prior_box.get_center()[1], 0]
+        )
+        features_text = MathTex(
+            r"\text{Features } \tilde{\mathbf{x}}", font_size=fs_main
+        ).move_to(features_box.get_center())
+
+        # Index z
+        index_box = Rectangle(color=index_color, width=1.5, height=0.6).move_to(
+            [features_box.get_center()[0], learn_box.get_center()[1], 0]
+        )
+        index_text = MathTex(r"\text{Index } \mathbf{z}", font_size=fs_main).move_to(
+            index_box.get_center()
+        )
+
+        # Reference Z
+        reference_box = Rectangle(color=reference_color, width=2.2, height=0.6).move_to(
+            epinet_box.get_bottom() + UP*0.8 + LEFT * 1.1
+        )
+        reference_text = MathTex(
+            r"\text{Reference } \mathbf{Z} \sim P_z", font_size=fs_labels
+        ).move_to(reference_box.get_center())
+
+        # Parameters η
+        param_eta = (
+            Rectangle(width=1.6, height=0.6)
+            .set_color(param_color)
+            .next_to(reference_box, RIGHT, buff=0.6)
+        )
+        param_eta_text = MathTex(
+            r"\text{Parameters } \eta", font_size=fs_labels
+        ).move_to(param_eta.get_center())
+
+        # Output
+        output_box = Rectangle(color=output_color, width=2.5, height=0.6).move_to(
+            [param_eta.get_center()[0], base_net_box.get_center()[1], 0]
+        )
+        output_text = MathTex(
+            r"\text{Output } f_\theta(\mathbf{x}, \mathbf{z})", font_size=fs_labels
+        ).move_to(output_box.get_center())
+
+        # Lines for arrows
+        lines = [
+            Line( #0
+                reference_box.get_bottom(),
+                reference_box.get_bottom() + DOWN * 0.5,
+                color=WHITE,
+            ),
+            Line( #1
+                reference_box.get_bottom() + DOWN * 0.5,
+                [
+                    index_box.get_center()[0],
+                    (reference_box.get_bottom() + DOWN * 0.5)[1],
+                    0,
+                ],
+                color=WHITE,
+            ),
+            Line( #2
+                prior_box.get_right(),
+                [
+                    4.5,
+                    prior_box.get_right()[1],
+                    0,
+                ],
+                color=WHITE,
+            ),
+            Line( #3
+                learn_box.get_right(),
+                [
+                    5.5,
+                    learn_box.get_right()[1],
+                    0,
+                ],
+                color=WHITE,
+            ),
+            Line( #4
+                param_eta.get_top(),
+                param_eta.get_top() + UP * 0.3,
+                color=WHITE,
+            ),
+            Line( #5
+                param_eta.get_top() + UP * 0.3,
+                [
+                    learn_box.get_center()[0],
+                    (param_eta.get_top() + UP*0.3)[1],
+                    0,
+                ],
+                color=WHITE,
+            ),
+        ]
+
+        # Arrows tips
+        arrows = [
+            Arrow(
+                input_group.get_right(),
+                base_network.get_left(),
+                stroke_width=4,
+                max_tip_length_to_length_ratio=0.1,
+                buff=0,
+            ),
+            Arrow(
+                base_network.get_bottom(),
+                features_box.get_top(),
+                stroke_width=4,
+                max_tip_length_to_length_ratio=0.15,
+                buff=0,
+            ),
+            Arrow(
+                lines[1].get_end(),
+                index_box.get_bottom(),
+                stroke_width=4,
+                max_tip_length_to_length_ratio=0.1,
+                buff=0,
+            ),
+            Arrow(
+                features_box.get_right(),
+                prior_box.get_left(),
+                stroke_width=4,
+                max_tip_length_to_length_ratio=0.05,
+                buff=0,
+            ),
+            Arrow(
+                features_box.get_right(),
+                learn_box.get_left(),
+                stroke_width=4,
+                max_tip_length_to_length_ratio=0.05,
+                buff=0,
+            ),
+            Arrow(
+                index_box.get_right(),
+                prior_box.get_left(),
+                stroke_width=4,
+                max_tip_length_to_length_ratio=0.05,
+                buff=0,
+            ),
+            Arrow(
+                index_box.get_right(),
+                learn_box.get_left(),
+                stroke_width=4,
+                max_tip_length_to_length_ratio=0.05,
+                buff=0,
+            ),
+            Arrow(
+                lines[2].get_end(),
+                [4.5, output_box.get_bottom()[1], 0],
+                stroke_width=4,
+                max_tip_length_to_length_ratio=0.1,
+                buff=0,
+            ),
+            Arrow(
+                lines[3].get_end(),
+                [5.5, output_box.get_bottom()[1], 0],
+                stroke_width=4,
+                max_tip_length_to_length_ratio=0.08,
+                buff=0,
+            ),
+            Arrow(
+                param_zeta.get_bottom(), 
+                base_network.get_top(),
+                stroke_width=4,
+                max_tip_length_to_length_ratio=0.5,
+                buff=0,
+            ),
+            Arrow(
+                lines[5].get_end(), 
+                learn_box.get_bottom(),
+                stroke_width=4,
+                max_tip_length_to_length_ratio=0.5,
+                buff=0,
+            ),
+        ]
+
+        # Add everything
+        self.play(
+            FadeIn(input_group),
+            FadeIn(
+                base_net_box,
+                base_network,
+                base_text,
+                param_zeta,
+                param_text,
+                base_net_label,
+            ),
+            FadeIn(features_box, features_text),
+            FadeIn(index_box, index_text),
+            FadeIn(reference_box, reference_text),
+            FadeIn(epinet_box, epinet_label),
+            FadeIn(prior_box, prior_text),
+            FadeIn(learn_box, learn_text),
+            FadeIn(output_box, output_text),
+            FadeIn(param_eta, param_eta_text),
+            FadeIn(*arrows),
+            FadeIn(*lines),
+        )
+        self.wait(0.3)
+        self.next_slide()
+
+        bert_network = (
+            Rectangle(width=2, height=0.6)
+            .set_color(WHITE)
+            .move_to(base_net_box.get_center() + DOWN * 0.4)
+        )
+        bert_text = MathTex(r"\text{Bert-base } \mu", font_size=fs_main).move_to(
+            base_network.get_center()
+        )
+        bert_net_label = Tex(
+            r"\textbf{BERT}", font_size=fs_labels, color=base_color
+        ).next_to(base_net_box, UP, buff=0.1)
+        
+        hdlayer_text = MathTex(
+            r"\text{Final hidden layer}", font_size=fs_main
+        ).move_to(features_box.get_center())
+
+        self.play(
+            ReplacementTransform(base_network, bert_network),
+            ReplacementTransform(base_text, bert_text),
+            ReplacementTransform(base_net_label, bert_net_label),
+            ReplacementTransform(features_text, hdlayer_text),
+        )
+        self.next_slide()
+
+
+class Load_pre(Slide):
+    def construct(self):
+        title = Tex(
+            r"Load pretrained BERT model", font_size=50, color=BLUE
+        ).to_edge(UP + LEFT)
+
+
+
+
+        # text_library = Tex(
+        #     r"Haiku",
+        #     font_size=30,
+        # ).next_to(flow_chart[0], 3*RIGHT)
+        # text_opt1 = Tex(
+        #     r"Find Haiku pretrained BERT",
+        #     font_size=20,
+        # ).move_to([3, 2, 0])
+        # text_opt2 = Tex(
+        #     r"Do the pre training",
+        #     font_size=20,
+        # ).move_to([3, 0, 0  ])
+        # arrow1 = Arrow(text_library.get_right(), text_opt1.get_left())
+        # arrow2 = Arrow(text_library.get_right(), text_opt2.get_left())
+        # group1 = VGroup(text_library, text_opt1, text_opt2, arrow1, arrow2)
+
+        # self.play(
+        #     Write(group1),
+        #     run_time=SPEEDUP_TIME
+        # )
+        # self.next_slide()
 
 class Conclusion(Slide):
     def construct(self):
@@ -1137,7 +1672,6 @@ class Conclusion(Slide):
             FadeOut(cons), 
             run_time=SPEEDUP_TIME)
         self.next_slide()
-
 
 class References(Slide):
     def construct(self):
@@ -1237,4 +1771,4 @@ class References(Slide):
 
         self.play(FadeIn(title), run_time=SPEEDUP_TIME)
         self.play(Write(refs_blist), run_time=SPEEDUP_TIME)
-        self.wait(2)
+        self.next_slide()
