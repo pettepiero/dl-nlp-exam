@@ -1296,8 +1296,8 @@ class Project(Slide):
 class EpinetNetworkDiagram(Slide):
 
     def construct(self):
-        c = NumberPlane().add_coordinates()
-        self.play(Write(c))
+        # c = NumberPlane().add_coordinates()
+        # self.play(Write(c))
         # Standard font size
         fs_main = 25
         fs_labels = 22
@@ -1421,21 +1421,21 @@ class EpinetNetworkDiagram(Slide):
 
         # Lines for arrows
         lines = [
-            Line( #0
+            Line(  # 0
                 reference_box.get_bottom(),
-                reference_box.get_bottom() + DOWN * 0.5,
+                reference_box.get_bottom() + DOWN * 0.25,
                 color=WHITE,
             ),
-            Line( #1
-                reference_box.get_bottom() + DOWN * 0.5,
+            Line(  # 1
+                reference_box.get_bottom() + DOWN * 0.25,
                 [
                     index_box.get_center()[0],
-                    (reference_box.get_bottom() + DOWN * 0.5)[1],
+                    (reference_box.get_bottom() + DOWN * 0.25)[1],
                     0,
                 ],
                 color=WHITE,
             ),
-            Line( #2
+            Line(  # 2
                 prior_box.get_right(),
                 [
                     4.5,
@@ -1444,7 +1444,7 @@ class EpinetNetworkDiagram(Slide):
                 ],
                 color=WHITE,
             ),
-            Line( #3
+            Line(  # 3
                 learn_box.get_right(),
                 [
                     5.5,
@@ -1453,16 +1453,38 @@ class EpinetNetworkDiagram(Slide):
                 ],
                 color=WHITE,
             ),
-            Line( #4
+            Line(  # 4
                 param_eta.get_top(),
                 param_eta.get_top() + UP * 0.3,
                 color=WHITE,
             ),
-            Line( #5
+            Line(  # 5
                 param_eta.get_top() + UP * 0.3,
                 [
                     learn_box.get_center()[0],
-                    (param_eta.get_top() + UP*0.3)[1],
+                    (param_eta.get_top() + UP * 0.3)[1],
+                    0,
+                ],
+                color=WHITE,
+            ),
+            Line(  # 6
+                base_network.get_right(),
+                [
+                    -1,
+                    base_network.get_right()[1],
+                    0,
+                ],
+                color=WHITE,
+            ),
+            Line(  # 7
+                [
+                    -1,
+                    base_network.get_right()[1],
+                    0,
+                ],
+                [
+                    -1,
+                    output_box.get_left()[1],
                     0,
                 ],
                 color=WHITE,
@@ -1471,83 +1493,90 @@ class EpinetNetworkDiagram(Slide):
 
         # Arrows tips
         arrows = [
-            Arrow(
+            Arrow( #0
                 input_group.get_right(),
                 base_network.get_left(),
                 stroke_width=4,
                 max_tip_length_to_length_ratio=0.1,
                 buff=0,
             ),
-            Arrow(
+            Arrow( #1
                 base_network.get_bottom(),
                 features_box.get_top(),
                 stroke_width=4,
                 max_tip_length_to_length_ratio=0.15,
                 buff=0,
             ),
-            Arrow(
+            Arrow( #2
                 lines[1].get_end(),
                 index_box.get_bottom(),
                 stroke_width=4,
                 max_tip_length_to_length_ratio=0.1,
                 buff=0,
             ),
-            Arrow(
+            Arrow( #3
                 features_box.get_right(),
                 prior_box.get_left(),
                 stroke_width=4,
                 max_tip_length_to_length_ratio=0.05,
                 buff=0,
             ),
-            Arrow(
+            Arrow( #4
                 features_box.get_right(),
                 learn_box.get_left(),
                 stroke_width=4,
                 max_tip_length_to_length_ratio=0.05,
                 buff=0,
             ),
-            Arrow(
+            Arrow( #5
                 index_box.get_right(),
                 prior_box.get_left(),
                 stroke_width=4,
                 max_tip_length_to_length_ratio=0.05,
                 buff=0,
             ),
-            Arrow(
+            Arrow( #6
                 index_box.get_right(),
                 learn_box.get_left(),
                 stroke_width=4,
                 max_tip_length_to_length_ratio=0.05,
                 buff=0,
             ),
-            Arrow(
+            Arrow( #7
                 lines[2].get_end(),
                 [4.5, output_box.get_bottom()[1], 0],
                 stroke_width=4,
                 max_tip_length_to_length_ratio=0.1,
                 buff=0,
             ),
-            Arrow(
+            Arrow( #8
                 lines[3].get_end(),
                 [5.5, output_box.get_bottom()[1], 0],
                 stroke_width=4,
                 max_tip_length_to_length_ratio=0.08,
                 buff=0,
             ),
-            Arrow(
+            Arrow( #9
                 param_zeta.get_bottom(), 
                 base_network.get_top(),
                 stroke_width=4,
                 max_tip_length_to_length_ratio=0.5,
                 buff=0,
             ),
-            Arrow(
+            Arrow( #10
                 lines[5].get_end(), 
                 learn_box.get_bottom(),
                 stroke_width=4,
                 max_tip_length_to_length_ratio=0.5,
                 buff=0,
             ),
+            Arrow( #11
+                lines[7].get_end(),
+                output_box.get_left(),
+                stroke_width=4,
+                max_tip_length_to_length_ratio=0.1,
+                buff=0,
+            )
         ]
 
         # Add everything
@@ -1586,17 +1615,45 @@ class EpinetNetworkDiagram(Slide):
         bert_net_label = Tex(
             r"\textbf{BERT}", font_size=fs_labels, color=base_color
         ).next_to(base_net_box, UP, buff=0.1)
-        
+
         hdlayer_text = MathTex(
             r"\text{Final hidden layer}", font_size=fs_main
         ).move_to(features_box.get_center())
 
+        class_head_box = (
+            Rectangle(width=2.2, height=0.6)
+            .set_color(GREY)
+            .move_to([1, output_box.get_center()[1], 0])
+        )
+        class_head_text = Tex(
+            r"\text{Classification head }", font_size=fs_labels
+        ).move_to(class_head_box.get_center())
+        new_arrow_11 = Arrow(
+            class_head_box.get_right(),
+            output_box.get_left(),
+            stroke_width=4,
+            max_tip_length_to_length_ratio=0.1,
+            buff=0,
+        )
+        new_line_11 = Line(
+            lines[7].get_end(),
+            class_head_box.get_left(),
+            color=WHITE,
+        )
+
         self.play(
             ReplacementTransform(base_network, bert_network),
-            ReplacementTransform(base_text, bert_text),
-            ReplacementTransform(base_net_label, bert_net_label),
-            ReplacementTransform(features_text, hdlayer_text),
+            run_time=SPEEDUP_TIME
         )
+        self.play(ReplacementTransform(base_text, bert_text), run_time=SPEEDUP_TIME)
+        self.play(ReplacementTransform(base_net_label, bert_net_label), run_time=SPEEDUP_TIME)
+        self.next_slide()
+        self.play(ReplacementTransform(features_text, hdlayer_text), run_time=SPEEDUP_TIME)
+        self.next_slide()
+        self.play(ReplacementTransform(arrows[11], new_arrow_11), run_time=SPEEDUP_TIME)
+        self.play(Create(new_line_11), run_time=SPEEDUP_TIME)
+        self.play(Create(class_head_box), run_time=SPEEDUP_TIME)
+        self.play(Write(class_head_text), run_time=SPEEDUP_TIME)
         self.next_slide()
 
 

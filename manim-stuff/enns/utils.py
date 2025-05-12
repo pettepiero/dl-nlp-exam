@@ -230,7 +230,6 @@ class UniformDistributionPlot(VMobject):
         self.plot.scale(self.scale_factor)
         self.add(self.plot)
 
-
 class BertExplanation(Slide):
     def create_LM_figure(self, first_text, second_text, color=BLUE):
         text = Tex(first_text, font_size=25)
