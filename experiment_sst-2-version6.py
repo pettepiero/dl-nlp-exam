@@ -26,7 +26,6 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 from jax.random import PRNGKey
-import jax.profiler
 import optax
 from datasets import load_dataset
 from enn.networks.bert.bert_v2 import BertConfigCustom, make_bert_enn
@@ -237,7 +236,7 @@ class BERTENNFineTuneSST2:
 
     def evaluate_validation_loss(self):
         val_labels = jnp.array([item['label'] for item in self.val_dataset])
-        batch_size = 32  # or 64 or whatever your GPU can handle
+        batch_size = self.batch_size
         num_batches = len(val_labels) // batch_size + (len(val_labels) % batch_size != 0)
     
         losses = []
@@ -279,18 +278,28 @@ class BERTENNFineTuneSST2:
         all_indices = jnp.arange(len(train_labels))
         
         losses = []
+        val_losses = []
+        steps = []
         accuracies = []
 
         indexer_fn = lambda key: self.indexer(key=key)
 
         for step in tqdm(range(self.num_steps)):
+            candidate_pool_size = self.batch_size*5
             candidate_indices = jax.random.choice(
                 key=next(self.rng),
                 a=jnp.arange(len(self.dataset)),
-                shape=(self.NB,),
+                shape=(candidate_pool_size,),
                 replace=False,
             )
             
+            #candidate_indices = jax.random.choice(
+            #    key=next(self.rng),
+            #    a=jnp.arange(len(self.dataset)),
+            #    shape=(self.NB,),
+            #    replace=False,
+            #)
+
             # Build candidate batch
             candidate_input_ids = self.input_ids[candidate_indices]
             candidate_token_type_ids = self.token_type_ids[candidate_indices]
@@ -317,7 +326,8 @@ class BERTENNFineTuneSST2:
             )
             
             # Select the top self.batch_size samples
-            selected_indices_in_pool = jnp.argsort(scores)[-self.nb:]
+            selected_indices_in_pool = jnp.argsort(scores)[-self.batch_size:]
+            #selected_indices_in_pool = jnp.argsort(scores)[-self.nb:]
             batch_indices = candidate_indices[selected_indices_in_pool]
 
             batch_input_ids = self.input_ids[batch_indices]
@@ -354,7 +364,8 @@ class BERTENNFineTuneSST2:
             # === VALIDATION EVALUATION every 100 steps ===
             if step % 100 == 0:
                 val_loss = self.evaluate_validation_loss()
-                #val_losses.append(val_loss)
+                val_losses.append(val_loss)
+                steps.append(step)
             
             # Compute accuracy
 #            combined_params = hk.data_structures.merge(self.frozen_params, self.trainable_params)
@@ -373,13 +384,14 @@ class BERTENNFineTuneSST2:
 #            accuracies.append(acc)
         run_end = time.time()
         print(f"🕒 Run {i+1} duration: {run_end - run_start:.2f} seconds")    
-        return losses, accuracies
+        return val_losses, steps, accuracies
 
 
 
 if __name__ == "__main__":
     start_time = time.time()
     print("\n\nFine tuning of BERT ENN model for SST2 classification\n\n")
+
     parser = argparse.ArgumentParser(description="Fine-tune BERT on SST2")
     parser.add_argument('--train_all', action='store_true', help='If set, trains all model parameters.')
     parser.add_argument('--test', action='store_true', help='If set, runs a faster test on 50 training steps and 3 number of repetitions')
@@ -475,7 +487,7 @@ if __name__ == "__main__":
 
     if args.test:
         config['num_steps'] = 50
-        config['num_runs'] = 3
+        config['num_runs'] = 1
 
     config_dict = {
             "train_all": args.train_all,
@@ -539,12 +551,15 @@ if __name__ == "__main__":
             pretrained_params=params,
             priority_criterion = args.priority,
         )
-        jax.profiler.start_trace(f"/tmp/jax_trace_{suffix}")
-        losses, acc = experiment.run()
-        jax.profiler.stop_trace()
+        val_losses, val_steps, acc = experiment.run()
 
-        all_loss_df[f'run_{i+1}'] = losses
-        all_acc_df[f'run_{i+1}'] = acc
+        val_df = pd.DataFrame({
+            "step": val_steps,
+            "val_loss": val_losses
+        })
+    
+#        all_loss_df[f'run_{i+1}'] = losses
+#        all_acc_df[f'run_{i+1}'] = acc
 
         if args.save_params and args.save_params_path is not None:
             print(f"🔁 Saving pretrained parameters to: {args.save_params_path}")
@@ -560,12 +575,13 @@ if __name__ == "__main__":
     accs_file_name = f"{output_dir}/accs{suffix}.csv"
     img_file_name = f"{output_dir}/img{suffix}.png"
   
-    all_loss_df.to_csv(losses_file_name, index_label="step")
-    all_acc_df.to_csv(accs_file_name, index_label="step")
+    val_df.to_csv(losses_file_name, index=False)
+#    all_loss_df.to_csv(losses_file_name, index_label="step")
+#    all_acc_df.to_csv(accs_file_name, index_label="step")
 
    # plot_loss_and_accuracy_curve(losses_file_name, accs_file_name, img_file_name)
     #plot_all_runs_with_mean(losses_file_name, img_file_name) 
-    save_results_to_file(losses, acc)
+    #save_results_to_file(losses, acc)
     print(f"DEBUG: params after learning: \n{experiment.trainable_params['BERT/classifier_head']['w']}")
     end_time = time.time()
     elapsed = end_time - start_time
