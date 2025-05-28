@@ -51,20 +51,14 @@ def update_step(params, state, frozen_params, opt_state, batch, rng_key, apply_f
         #logits, _ = apply_fn(combined, rng_key, batch.x)
         index = indexer(rng_key)
         output, new_state = apply_fn(combined, state, batch.x, index)
-        #output, new_state = apply_fn(combined, state, rng_key, batch.x, index)
         logits = output.extra['classification_logits']
-
-        #probs = jax.nn.softmax(logits, axis=-1)
-        #preds = jnp.argmax(probs, axis=-1)
-        
-       # labels = jax.nn.one_hot(batch.y, 2)
-       # labels = labels.astype(jnp.int32)
         labels = batch.y.astype(jnp.int32)
         #return optax.softmax_cross_entropy(logits, labels).mean()
         return optax.softmax_cross_entropy_with_integer_labels(logits, labels).mean()
 
     grads = jax.grad(loss_fn_inner)(params)
-    updates, new_opt_state = optimizer.update(grads, opt_state)
+    #updates, new_opt_state = optimizer.update(grads, opt_state)
+    updates, new_opt_state = optimizer.update(grads, opt_state, params)
     new_params = optax.apply_updates(params, updates)
 
     # Compute loss and state update again
@@ -90,7 +84,6 @@ class BERTENNFineTuneSST2:
         tokenizer,
         rng,
         batch_size,
-        criterion: str,
         num_steps: Optional[int],
         learning_rate,
         train_all: bool = False,
@@ -115,19 +108,6 @@ class BERTENNFineTuneSST2:
         self.NB = NB
         self.nb = nb
 
-        if criterion == 'num_steps':
-            if num_steps is None:
-                print("Error, selected num_steps criterion but"
-                      " did not provide num_steps")
-                exit()
-        elif criterion == 'num_epochs':
-            if num_epochs is None:
-                print("Error, selected num_epochs criterion but"
-                      " did not provide num_epochs")
-                exit()
-        else:
-            print("Error in criterion")
-            exit()
 
         dummy_input = BertInput(
             token_ids=jnp.zeros((1, 128), dtype=jnp.int32),
@@ -151,17 +131,6 @@ class BERTENNFineTuneSST2:
         self.val_input_ids = jnp.stack([jnp.array(ex["input_ids"]) for ex in self.val_dataset])
         self.val_token_type_ids = jnp.stack([jnp.array(ex["token_type_ids"]) for ex in self.val_dataset])
         self.val_attention_masks = jnp.stack([jnp.array(ex["attention_mask"]) for ex in self.val_dataset])
-
-
-
-        def print_tree(params, prefix=""):
-            for k, v in params.items():
-                if isinstance(v, dict):
-                    print_tree(v, prefix + k + "/")
-                else:
-                    print(prefix + k)
-        
-       # print_tree(self.params)
 
         def is_trainable(module_name, name, value):
             if self.train_all:
@@ -196,7 +165,7 @@ class BERTENNFineTuneSST2:
         for k in self.trainable_params.keys():
             print(k)
         
-        self.opt = optax.adam(learning_rate)
+        self.opt = optax.adamw(learning_rate=learning_rate, b2=0.95)
         self.opt_state = self.opt.init(self.trainable_params)
 
         print(f"DEBUG: params before learning: \n{self.trainable_params['BERT/classifier_head']['w']}")
@@ -224,15 +193,6 @@ class BERTENNFineTuneSST2:
             return_tensors="np",
         )
         return tokens
-
-#    def select_uncertain_samples(self, pool, num_samples=10):
-#        tokens = self.tokenize(pool['sentence'])
-#        input_ids = tokens['input_ids']
-#        batch = datasets.ArrayBatch(x=input_ids, y=np.array(pool['label']))
-#        scores, _ = self.priority_fn(self.params, self.state, batch, next(self.rng))
-#        selected_indices = jnp.argsort(scores)[-num_samples:]
-#        return [pool[i] for i in selected_indices]
-
 
     def evaluate_validation_loss(self):
         val_labels = jnp.array([item['label'] for item in self.val_dataset])
@@ -266,11 +226,9 @@ class BERTENNFineTuneSST2:
         mean_val_loss = jnp.mean(jnp.array(losses))
         return float(mean_val_loss)
 
-
-
-    def compute_accuracy(self, logits: jnp.ndarray, labels: jnp.ndarray) -> float:
-        predictions = jnp.argmax(logits, axis=-1)
-        return jnp.mean(predictions == labels)
+    # def compute_accuracy(self, logits: jnp.ndarray, labels: jnp.ndarray) -> float:
+    #     predictions = jnp.argmax(logits, axis=-1)
+    #     return jnp.mean(predictions == labels)
 
     def run(self):
         run_start = time.time()
@@ -301,14 +259,10 @@ class BERTENNFineTuneSST2:
             #)
 
             # Build candidate batch
-            candidate_input_ids = self.input_ids[candidate_indices]
-            candidate_token_type_ids = self.token_type_ids[candidate_indices]
-            candidate_attention_mask = self.attention_masks[candidate_indices]
- 
             candidate_input = BertInput(
-                token_ids=candidate_input_ids,
-                segment_ids=candidate_token_type_ids,
-                input_mask=candidate_attention_mask,
+                token_ids=self.input_ids[candidate_indices],
+                segment_ids=self.token_type_ids[candidate_indices],
+                input_mask=self.attention_masks[candidate_indices],
             )
 
             # Build ArrayBatch for the candidates
@@ -359,7 +313,7 @@ class BERTENNFineTuneSST2:
                 indexer=indexer_fn,
             )
             
-            losses.append(float(loss))
+            # losses.append(float(loss))
 
             # === VALIDATION EVALUATION every 100 steps ===
             if step % 100 == 0:
@@ -508,8 +462,8 @@ if __name__ == "__main__":
         }
 
 
-    all_loss_df = pd.DataFrame()
-    all_acc_df = pd.DataFrame()
+    #all_loss_df = pd.DataFrame()
+    #all_acc_df = pd.DataFrame()
 
     if args.load_params and args.load_params_path is not None:
         print(f"🔁 Loading pretrained parameters from: {args.load_params_path}")
@@ -518,7 +472,6 @@ if __name__ == "__main__":
         params = hk.data_structures.to_immutable_dict(loaded_params)
     else:
         print("🚀 Using default initialized parameters (with preloaded encoder weights)")
-
     
     suffix = f"_{args.suffix}" if args.suffix else ""
     # Create an output directory per job ID
@@ -544,13 +497,13 @@ if __name__ == "__main__":
             tokenizer = tokenizer,
             rng = next(rng),
             batch_size = config['batch_size'],
-            criterion = 'num_steps',
             num_steps = config['num_steps'],
             learning_rate = config['learning_rate'],
             train_all = args.train_all,
             pretrained_params=params,
             priority_criterion = args.priority,
         )
+        print(f"DEBUG: len(experiment.dataset = {len(experiment.dataset)}")
         val_losses, val_steps, acc = experiment.run()
 
         val_df = pd.DataFrame({

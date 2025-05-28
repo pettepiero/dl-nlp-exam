@@ -6,30 +6,57 @@ from enn.networks.bert.base import BertInput
 from enn.networks.bert.bert_v2 import make_bert_base, BertConfigCustom
 
 
-def torch_to_jax(torch_tensor):
+def th_tensor_to_jnp_array(torch_tensor):
     return jnp.array(torch_tensor.detach().cpu().numpy())
 
 
-def embedding_params_fix(haiku_params, jax_bert_params):
-    haiku_params["BERT/word_embeddings"]["embeddings"] = jax_bert_params[
+def embedding_params_fix(haiku_params, hf_params):
+    if haiku_params["BERT/word_embeddings"]["embeddings"].shape !=  hf_params["embeddings.word_embeddings.weight"].shape:
+        print("ERROR in embedding_params_fix (1)")
+        exit(1)
+    else:
+        print("Passed")
+    haiku_params["BERT/word_embeddings"]["embeddings"] = hf_params[
         "embeddings.word_embeddings.weight"
     ]
-    haiku_params["BERT/token_type_embeddings"]["embeddings"] = jax_bert_params[
+
+    if haiku_params["BERT/token_type_embeddings"]["embeddings"].shape !=  hf_params["embeddings.token_type_embeddings.weight"].shape:
+        print("ERROR in embedding_params_fix (2)")
+        exit(1)
+    else:
+        print("Passed")
+    haiku_params["BERT/token_type_embeddings"]["embeddings"] = hf_params[
         "embeddings.token_type_embeddings.weight"
     ]
-    haiku_params["BERT/position_embeddings"]["embeddings"] = jax_bert_params[
+
+    if haiku_params["BERT/position_embeddings"]["embeddings"].shape !=  hf_params["embeddings.position_embeddings.weight"].shape:
+        print("ERROR in embedding_params_fix (3)")
+        exit(1)
+    else:
+        print("Passed")
+    haiku_params["BERT/position_embeddings"]["embeddings"] = hf_params[
         "embeddings.position_embeddings.weight"
     ]
-    haiku_params["BERT/embeddings_ln"]["scale"] = jax_bert_params[
+    if haiku_params["BERT/embeddings_ln"]["scale"].shape !=  hf_params["embeddings.LayerNorm.weight"].shape:
+        print("ERROR in embedding_params_fix (4)")
+        exit(1)
+    else:
+        print("Passed")
+    haiku_params["BERT/embeddings_ln"]["scale"] = hf_params[
         "embeddings.LayerNorm.weight"
     ]
-    haiku_params["BERT/embeddings_ln"]["offset"] = jax_bert_params[
+    if haiku_params["BERT/embeddings_ln"]["offset"].shape !=  hf_params["embeddings.LayerNorm.bias"].shape:
+        print("ERROR in embedding_params_fix (5)")
+        exit(1)
+    else:
+        print("Passed")
+    haiku_params["BERT/embeddings_ln"]["offset"] = hf_params[
         "embeddings.LayerNorm.bias"
     ]
     return haiku_params
 
 
-def layer_params_fix(haiku_params, jax_bert_params, layer_id):
+def layer_params_fix(haiku_params, hf_params, layer_id):
     conversion_dict = {
         "query_": "attention.self.query",
         "keys_": "attention.self.key",
@@ -43,13 +70,13 @@ def layer_params_fix(haiku_params, jax_bert_params, layer_id):
 
     for name, hf_name in conversion_dict.items():
         haiku_name = f"BERT/~_bert_layer/{name}{layer_id}"
-        jax_name = f"encoder.layer.{layer_id}.{hf_name}"
+        hf_name = f"encoder.layer.{layer_id}.{hf_name}"
 
         if "dense" in hf_name or "query" in hf_name or "key" in hf_name or "value" in hf_name:
-            haiku_params[haiku_name]["w"] = jax_bert_params[jax_name + ".weight"].T
+            haiku_params[haiku_name]["w"] = hf_params[hf_name + ".weight"].T
         else:
-            haiku_params[haiku_name]["w"] = jax_bert_params[jax_name + ".weight"]
-        haiku_params[haiku_name]["b"] = jax_bert_params[jax_name + ".bias"]
+            haiku_params[haiku_name]["w"] = hf_params[hf_name + ".weight"]
+        haiku_params[haiku_name]["b"] = hf_params[hf_name + ".bias"]
     return haiku_params
 
 
@@ -57,6 +84,6 @@ def load_pretrained_bert_weights(pretrained_model_name="bert-base-uncased"):
     tokenizer = BertTokenizer.from_pretrained(pretrained_model_name)
     torch_bert = BertModel.from_pretrained(pretrained_model_name)
     config = BertConfig.from_pretrained(pretrained_model_name)
-    jax_weights = {k: torch_to_jax(v) for k, v in torch_bert.state_dict().items() if "pooler" not in k}
-    return tokenizer, config, jax_weights
+    hf_weights = {k: th_tensor_to_jnp_array(v) for k, v in torch_bert.state_dict().items() if "pooler" not in k}
+    return tokenizer, config, hf_weights 
 

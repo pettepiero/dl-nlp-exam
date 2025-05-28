@@ -15,6 +15,7 @@
 # ============================================================================
 import os
 import json
+import time
 import matplotlib.pyplot as plt
 import argparse
 from typing import NamedTuple, Optional
@@ -75,10 +76,10 @@ class BERTFineTuneSST2:
         self,
         model,
         dataset,
+        val_dataset,
         tokenizer,
         rng,
         batch_size,
-        criterion: str,
         num_steps: Optional[int],
         learning_rate,
         train_all: bool = False,
@@ -86,25 +87,12 @@ class BERTFineTuneSST2:
     ):
         self.model = model 
         self.dataset = dataset
+        self.val_dataset = val_dataset
         self.tokenizer = tokenizer
         self.rng = hk.PRNGSequence(rng)
         self.batch_size = batch_size
         self.num_steps = num_steps
         self.train_all = train_all
-
-        if criterion == 'num_steps':
-            if num_steps is None:
-                print("Error, selected num_steps criterion but"
-                      " did not provide num_steps")
-                exit()
-        elif criterion == 'num_epochs':
-            if num_epochs is None:
-                print("Error, selected num_epochs criterion but"
-                      " did not provide num_epochs")
-                exit()
-        else:
-            print("Error in criterion")
-            exit()
 
         # Init model
         dummy_input = BertInput(
@@ -170,31 +158,67 @@ class BERTFineTuneSST2:
         tokens = self.tokenizer(
             texts,
             padding="max_length",
-            max_length=512,
+            #max_length=512,
+            max_length=128,
             truncation=True,
             return_tensors="np",
         )
         return tokens
 
+    def evaluate_validation_loss(self):
+        val_labels = jnp.array([item['label'] for item in self.val_dataset])
+        batch_size = self.batch_size
+        num_batches = len(val_labels) // batch_size + (len(val_labels) % batch_size != 0)
+    
+        losses = []
+    
+        for i in range(num_batches):
+            batch_indices = jnp.arange(i * batch_size, min((i + 1) * batch_size, len(val_labels)))
+    
+            batch_input_ids = jnp.stack([jnp.array(self.val_dataset[int(i)]['input_ids']) for i in batch_indices])
+            batch_token_type_ids = jnp.stack([jnp.array(self.val_dataset[int(i)]['token_type_ids']) for i in batch_indices])
+            batch_attention_mask = jnp.stack([jnp.array(self.val_dataset[int(i)]['attention_mask']) for i in batch_indices])
+            batch_labels = val_labels[batch_indices]
+    
+            input = BertInput(
+                token_ids=batch_input_ids,
+                segment_ids=batch_token_type_ids,
+                input_mask=batch_attention_mask,
+            )
+            batch = ArrayBatch(x=input, y=batch_labels)
+    
+            combined_params = hk.data_structures.merge(self.frozen_params, self.trainable_params)
+            output = self.model.apply(combined_params, next(self.rng), batch.x)
+            # output, _ = self.model.apply(combined_params, self.state, batch.x, index=self.indexer(next(self.rng)))
+            logits = output.extra['classification_logits']
+    
+            loss = optax.softmax_cross_entropy_with_integer_labels(logits, batch.y).mean()
+            losses.append(loss)
+    
+        mean_val_loss = jnp.mean(jnp.array(losses))
+        return float(mean_val_loss)
 
-    def compute_accuracy(self, logits: jnp.ndarray, labels: jnp.ndarray) -> float:
-        predictions = jnp.argmax(logits, axis=-1)
-        return jnp.mean(predictions == labels)
+    # def compute_accuracy(self, logits: jnp.ndarray, labels: jnp.ndarray) -> float:
+    #     predictions = jnp.argmax(logits, axis=-1)
+    #     return jnp.mean(predictions == labels)
 
     def run(self):
+        run_start = time.time()
         train_labels = jnp.array([item['label'] for item in self.dataset])
         all_indices = jnp.arange(len(train_labels))
         
         losses = []
+        val_losses = []
+        steps = []
         accuracies = []
     
         for step in tqdm(range(self.num_steps)):
             batch_indices = jax.random.choice(
-            key=next(self.rng),
-            a=jnp.arange(len(self.dataset)),
-            shape=(self.batch_size,),
-            replace=True,
-        )
+                key=next(self.rng),
+                a=jnp.arange(len(self.dataset)),
+                shape=(self.batch_size,),
+                replace=True,
+            )
             batch_input_ids = jnp.stack([jnp.array(self.dataset[int(i)]['input_ids']) for i in batch_indices])
             batch_token_type_ids = jnp.stack([jnp.array(self.dataset[int(i)]['token_type_ids']) for i in batch_indices])
             batch_attention_mask = jnp.stack([jnp.array(self.dataset[int(i)]['attention_mask']) for i in batch_indices])
@@ -219,21 +243,18 @@ class BERTFineTuneSST2:
                 apply_fn=base_model.apply,
                 optimizer=self.opt
             )
-    
-            # Compute accuracy
-            combined_params = hk.data_structures.merge(self.frozen_params, self.trainable_params)
-            output = base_model.apply(combined_params, next(self.rng), batch.x)
-            logits = output.extra['classification_logits']
-            acc = float(self.compute_accuracy(logits, batch.y))
-    
-            losses.append(float(loss))
-            accuracies.append(acc)
-    
-        return losses, accuracies
-
+            # === VALIDATION EVALUATION every 100 steps ===
+            if step % 100 == 0:
+                val_loss = self.evaluate_validation_loss()
+                val_losses.append(val_loss)
+                steps.append(step)
+        run_end = time.time()
+        print(f"🕒 Run {i+1} duration: {run_end - run_start:.2f} seconds")    
+        return val_losses, steps, accuracies
 
 
 if __name__ == "__main__":
+    start_time = time.time()
 
     print("\n\nFine tuning of BERT base model for SST2 classification\n\n")
 
@@ -246,10 +267,10 @@ if __name__ == "__main__":
     parser.add_argument('--load_params_path', type=str, default=None, help='Path to load model parameters.')
     parser.add_argument('--save_params_path', type=str, default=None, help='Path to save model parameters.')
     parser.add_argument('--learning_rate', type=float, default=3e-5, help='Learning rate for optimizer.') 
-    parser.add_argument('--priority', type=str, default='uniform', help='Priority criterion. Default: "uniform". Available: "uniform", "variance", "entropy", "margin", "bald"') 
+    parser.add_argument('--num_runs', type=int, default=2, help='Number of seeds to run')
     args = parser.parse_args()
 
-    SEED = 0
+    SEED = args.seed if hasattr(args, 'seed') else 0
     rng = hk.PRNGSequence(SEED)
 
     print("Creating base model....")
@@ -289,19 +310,23 @@ if __name__ == "__main__":
     print("Pretokenizing the dataset...")
     dataset = dataset.map(lambda x: {'sentence': x['sentence'], 'label': x['label']})
     dataset = preprocess_dataset(dataset['train'], tokenizer)
+    full_dataset = dataset
+    split = int(0.9*len(full_dataset))
+    train_dataset = full_dataset.select(range(split))
+    val_dataset = full_dataset.select(range(split, len(full_dataset)))
     print("...done")
 
     config = {
         'batch_size': 32,
         'num_steps': 1000,
         'epochs': 1,
-        'learning_rate': 3e-5,
+        'learning_rate': args.learning_rate,
         'seed': rng,
-        'num_runs': 5,
+        'num_runs': args.num_runs,
     }
     if args.test:
         config['num_steps'] = 50
-        config['num_runs'] = 3
+        config['num_runs'] = 1
 
     config_dict = {
             "train_all": args.train_all,
@@ -312,16 +337,12 @@ if __name__ == "__main__":
             "load_params_path": args.load_params_path,
             "save_params_path": args.save_params_path,
             "learning_rate": args.learning_rate,
-            "priority": args.priority,
             "batch_size": config['batch_size'],
             "num_steps": config['num_steps'],
             "num_runs": config['num_runs'],
             "seed": SEED,  
         }
 
-    all_loss_df = pd.DataFrame()
-    all_acc_df = pd.DataFrame()
-    
     if args.load_params and args.load_params_path is not None:
         print(f"🔁 Loading pretrained parameters from: {args.load_params_path}")
         with np.load(args.load_params_path, allow_pickle=True) as f:
@@ -336,6 +357,12 @@ if __name__ == "__main__":
     print(f"\n\nMaking directory {output_dir}")
     os.makedirs(output_dir, exist_ok=True)
     print(f"📂 Saving all outputs to {output_dir}")
+    config_path = os.path.join(output_dir, "config.json")
+    with open(config_path, "w") as f:
+        json.dump(config_dict, f, indent=4)
+    print(f"Saved config to {config_path}")
+
+    print(f"\n\nTraining on all params? {args.train_all}"\n\n)
 
     print("Running experiment...")
     for i in range(config['num_runs']):
@@ -343,45 +370,39 @@ if __name__ == "__main__":
 
         experiment = BERTFineTuneSST2(
             model=base_model,
-            dataset = dataset,
+            dataset = train_dataset,
+            val_dataset = val_dataset,
             tokenizer = tokenizer,
             rng = next(config['seed']),
             batch_size = config['batch_size'],
-            criterion = 'num_steps',
             num_steps = config['num_steps'],
             learning_rate = config['learning_rate'],
             train_all = args.train_all,
             pretrained_params=params
         )
-        losses, acc = experiment.run()
+        val_losses, val_steps, acc = experiment.run()
 
-        all_loss_df[f'run_{i+1}'] = losses
-        all_acc_df[f'run_{i+1}'] = acc
-        
+        val_df = pd.DataFrame({
+            "step": val_steps,
+            "val_loss": val_losses,
+        })
+
         if args.save_params and args.save_params_path is not None:
             print(f"🔁 Saving pretrained parameters to: {args.save_params_path}")
             final_combined_params = hk.data_structures.merge(experiment.frozen_params, experiment.trainable_params)
             np.savez(args.save_params_path, params=final_combined_params)
 
-
-    config_path = os.path.join(output_dir, "config.json")
-    with open(config_path, "w") as f:
-        json.dump(config_dict, f, indent=4)
-    print(f"Saved config to {config_path}")
-
-    if args.train_all:
-        losses_file_name = "all_params_losses.csv"
-        accs_file_name = "all_params_accs.csv"
-        img_file_name = "all_params_BERT-base"
-    else:
-        losses_file_name = "subset_params_losses.csv"
-        accs_file_name = "subset_params_accs.csv"
-        img_file_name = "subset_params_BERT-base"
+    losses_file_name = f"{output_dir}/losses{suffix}.csv"
+    accs_file_name = f"{output_dir}/accs{suffix}.csv"
+    img_file_name = f"{output_dir}/img{suffix}.png"
     
-    all_loss_df.to_csv(losses_file_name , index_label="step")
-    all_acc_df.to_csv(accs_file_name , index_label="step")
+    val_df.to_csv(losses_file_name, index=False)
    
     #plot_loss_and_accuracy_curve(losses_file_name, accs_file_name, img_file_name)
-    plot_all_runs_with_mean(losses_file_name, accs_file_name, img_file_name) 
-    save_results_to_file(losses, acc)
     print(f"DEBUG: params after learning: \n{experiment.trainable_params['BERT/classifier_head']['w']}")
+    end_time = time.time()
+    elapsed = end_time - start_time
+    mins, secs = divmod(int(elapsed), 60)
+    hours, mins = divmod(mins, 60)
+    
+    print(f"\n⏱️ Total run time: {hours}h {mins}m {secs}s")
